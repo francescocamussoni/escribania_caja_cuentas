@@ -1,0 +1,16 @@
+# Spec-Kitti Atlassian Sync - Dependencias Python
+# Instalar con: pip install -r .spec-kitti/requirements.txt
+
+# HTTP client
+requests>=2.31.0
+httpx>=0.25.0
+
+# HTML to Markdown conversion
+html2text>=2020.1.16
+
+# Environment variables
+python-dotenv>=1.0.0
+
+# CLI utilities (opcional, para mejor experiencia)
+rich>=13.0.0
+

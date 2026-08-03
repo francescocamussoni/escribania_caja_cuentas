@@ -1,0 +1,17 @@
+---
+alwaysApply: true
+---
+
+# Spec-Kitti — Discovery Context
+
+If `.spec-kitti/discovery/` exists, **always read these files** before making any architectural decision, code change, or module analysis:
+
+- [architecture.md](mdc:.spec-kitti/discovery/architecture.md) — architectural pattern, layers, infrastructure
+- [modules.md](mdc:.spec-kitti/discovery/modules.md) — module responsibilities and key files
+- [bounded-contexts.md](mdc:.spec-kitti/discovery/bounded-contexts.md) — business domain boundaries
+
+## Rules
+- Never assume the project structure — it is documented above
+- When asked "where should this file go?" → answer using `modules.md`
+- When asked "is this a layer violation?" → check `architecture.md`
+- When a new module is needed → verify it doesn't belong to an existing one first

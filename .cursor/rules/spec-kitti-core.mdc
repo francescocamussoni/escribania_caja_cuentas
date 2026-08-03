@@ -1,0 +1,38 @@
+---
+alwaysApply: true
+---
+
+# Spec-Kitti — Core Context
+
+This project uses the **Spec-Kitti** workflow. Key locations:
+
+- **Constitution**: [constitution.md](mdc:.spec-kitti/memory/constitution.md) — project principles. Read before touching code.
+- **Skills**: `.cursor/skills/` — reusable agent capabilities invoked by commands
+- **Discovery**: `.spec-kitti/discovery/` — auto-generated architecture artifacts
+
+## Workflow
+
+**Legacy project** (existing codebase):
+1. `/spec-kitti.discovery` — reverse-engineer the codebase first
+2. `/spec-kitti.specify` — write feature specs  *(or `/spec-kitti.sync` to import from Jira + Confluence)*
+3. `/spec-kitti.plan` — plan the implementation
+4. `/spec-kitti.tasks` → `/spec-kitti.tasks.shape` — break into Work Units
+5. `/spec-kitti.implement [WU-ID]` — generate code autonomously
+
+**Greenfield project** (new codebase):
+1. `/spec-kitti.specify` — write feature specs  *(or `/spec-kitti.sync` to import from Jira + Confluence)*
+2. `/spec-kitti.plan` — plan the implementation
+3. `/spec-kitti.tasks` → `/spec-kitti.tasks.shape` — break into Work Units
+4. `/spec-kitti.implement [WU-ID]` — generate code autonomously
+
+> Discovery is **optional** — only run it when working on an existing codebase.
+> `/spec-kitti.sync` is **optional** — use it when specs already exist in Jira/Confluence instead of writing them manually.
+> `/spec-kitti.swagger` is **optional** — run it to generate or update the OpenAPI 3.0.0 contract at `swagger/openapi.yaml` from the codebase.
+> `/spec-kitti.amend` is **optional** — run it ONLY on a feature that already has `spec.md`, `plan.md`, `tasks.md` and `task-status.json` when a new RFC / scope change arrives. It cascades the change across constitution → spec → plan → tasks **without rewriting tasks already `done` or `in_progress`** (refactors are added as new tasks instead).
+
+## Non-negotiable rules
+- Never modify source code without reading `memory/constitution.md` first (if it exists)
+- Never create files outside the paths defined in the active Work Unit
+- If `.spec-kitti/discovery/` exists → always respect the architectural layers in `discovery/architecture.md`
+- **UI tasks**: NEVER hardcode design values (colors, fonts, spacing) without first querying Figma via MCP — see `spec-kitti-figma.mdc`
+- **UI tasks**: The `conventions/` folder for UI assets is deprecated — Figma MCP is the single source of truth for all design tokens

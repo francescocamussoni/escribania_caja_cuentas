@@ -1,0 +1,278 @@
+---
+alwaysApply: true
+---
+
+# Spec-Kitti — Figma MCP Integration
+
+## Principio Fundamental
+
+Cuando una tarea implique **construir o modificar UI**, el agente **DEBE** extraer la especificación de diseño directamente desde Figma usando el MCP oficial.
+
+La carpeta `conventions/` para activos de UI queda **deprecada**. Las capturas de pantalla adjuntas en el chat son referencia visual únicamente — **nunca** son la fuente de verdad para tokens de diseño.
+
+---
+
+## Detección de Tareas UI
+
+Una tarea es de tipo UI si alguna de estas condiciones se cumple:
+
+- El `file_path` de la Work Unit apunta a archivos `.tsx`, `.jsx`, `.vue`, `.svelte`, `.css`, `.scss`, `.html` o similares
+- Los `subtasks` mencionan: componentes, pantallas, layouts, estilos, clases CSS, animaciones
+- El ticket, `spec.md` o `tasks.md` contiene una URL de Figma o un Node ID
+- La descripción menciona palabras clave: `UI`, `screen`, `layout`, `component`, `style`, `design`, `token`
+
+---
+
+## GATEKEEPER — Validación Bloqueante (obligatoria)
+
+> Esta sección se ejecuta **antes de cualquier otra acción** en tareas UI. Es la primera comprobación. Si falla, la ejecución se detiene completamente.
+
+### Paso 0 — Verificar referencia Figma (HARD STOP)
+
+**Busca en este orden:**
+
+1. Work Unit JSON → campo `figma_url` o `figma_node_id`
+2. `.spec-kitti/spec.md` de la feature → sección de diseño o metadata
+3. `.spec-kitti/tasks.md` → campo `figma:` en el task correspondiente
+
+**Resultado de la verificación:**
+
+| Situación | Acción obligatoria |
+|-----------|-------------------|
+| Se encontró URL completa de Figma | Continuar al Paso 1 |
+| Se encontró solo un `node-id` válido (`NNNN:NNNN`) | Continuar al Paso 1 |
+| No se encontró ninguna referencia | **DETENER. Emitir el error de bloqueo. NO generar código.** |
+
+**Mensaje de error de bloqueo (emitir textualmente cuando no hay referencia):**
+
+```
+🚫 FIGMA REFERENCE REQUIRED — UI TASK BLOCKED
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Task   : [task-id o WU-ID]
+File   : [file_path]
+Status : BLOCKED — no Figma reference found.
+
+This task involves UI code. Spec-Kitti requires an exact Figma
+node reference before generating any design-related code.
+
+Please provide ONE of the following:
+
+  Option A — Full Figma frame URL (preferred):
+    https://www.figma.com/design/<fileKey>/<fileName>?node-id=<nodeId>
+
+  Option B — Node ID only (if fileKey is already known):
+    node-id: <NNNN:NNNN>
+
+How to get it in Figma:
+  1. Select the frame or component
+  2. Right-click → "Copy link to selection"
+     — or —
+  3. Copy the full URL from the browser bar (includes ?node-id=...)
+
+⚠️  No code will be generated until a valid Figma reference is provided.
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+```
+
+---
+
+## Formato Obligatorio en `tasks.md` para Tareas UI
+
+Toda tarea de tipo UI en `tasks.md` **DEBE** incluir el campo `figma:` en su metadata. Sin él, la tarea se considera **incompleta** y no puede ser procesada por `/spec-kitti.implement`.
+
+**Formato correcto:**
+
+```markdown
+- [ ] T012 [P] [US1] Implementar componente Button en src/components/Button.tsx
+  - figma: https://www.figma.com/design/AbCdEf/MyApp?node-id=123:456
+```
+
+**Formato incorrecto (bloqueante):**
+
+```markdown
+- [ ] T012 [P] [US1] Implementar componente Button en src/components/Button.tsx
+  ← falta el campo figma: → el agente DEBE rechazar este task
+```
+
+El comando `/spec-kitti.tasks` **DEBE** incluir el campo `figma:` cuando genera tareas UI a partir del `spec.md`. Si el `spec.md` no contiene URL de Figma para una sección UI, el comando `/spec-kitti.tasks` debe pausar y solicitarla al desarrollador antes de continuar.
+
+---
+
+## Protocolo de Extracción Figma MCP
+
+### Paso 1 — Parsear la referencia de Figma
+
+(Solo se llega aquí si el GATEKEEPER del Paso 0 fue superado.)
+
+Busca en este orden:
+
+1. Work Unit JSON → campo `figma_url` o `figma_node_id`
+2. `.spec-kitti/spec.md` de la feature → sección de diseño
+3. `.spec-kitti/tasks.md` → campo `figma:` en el task correspondiente
+
+### Paso 2 — Parsear la URL de Figma
+
+```
+figma.com/design/:fileKey/:fileName?node-id=:nodeId
+```
+
+- Extrae `fileKey` y `nodeId`
+- Convierte `-` en `:` en el `nodeId` (ej. `123-456` → `123:456`)
+
+### Paso 3 — Llamar `get_design_context`
+
+Esta es la llamada **primaria y obligatoria**. Devuelve:
+
+- Código de referencia React+Tailwind (usar como guía estructural, no copiar literal)
+- Screenshot embebido del nodo
+- Hints de Code Connect, tokens, anotaciones del diseñador
+
+### Paso 4 — Extracción exhaustiva de tokens
+
+Del resultado del MCP, **DEBES** documentar internamente antes de escribir código:
+
+#### Colores
+
+| Propiedad | Extraer | Formato de salida |
+|-----------|---------|-------------------|
+| Relleno de fondo | Fill color | `#RRGGBB` o `rgba(R,G,B,A)` |
+| Texto | Font color | `#RRGGBB` |
+| Borde | Stroke color | `rgba(R,G,B,A)` |
+| Sombra | Shadow color | `rgba(R,G,B,A)` |
+| Gradiente | Start + End | Lista de stops |
+
+Registra también el **nombre del token de diseño** si existe (ej. `Primary/500`, `Neutral/100`).
+
+#### Tipografía (por cada estilo de texto en el nodo)
+
+```
+font-family:     <valor exacto, ej. "Inter", "Roboto">
+font-size:       <valor en px, convertir a rem dividiendo por 16>
+font-weight:     <número exacto: 400 | 500 | 600 | 700 | 800>
+line-height:     <px o valor relativo, ej. 24px o 1.5>
+letter-spacing:  <px o em, ej. 0.02em>
+text-transform:  <none | uppercase | capitalize>
+text-align:      <left | center | right>
+```
+
+#### Auto Layout → Flexbox / Grid
+
+Para cada frame con Auto Layout activo:
+
+| Propiedad Figma | Propiedad CSS |
+|-----------------|---------------|
+| Direction: HORIZONTAL | `flex-direction: row` |
+| Direction: VERTICAL | `flex-direction: column` |
+| Gap (itemSpacing) | `gap: Npx` |
+| Padding Top/Right/Bottom/Left | `padding: Tpx Rpx Bpx Lpx` |
+| Primary Axis = SPACE_BETWEEN | `justify-content: space-between` |
+| Primary Axis = CENTER | `justify-content: center` |
+| Primary Axis = MIN | `justify-content: flex-start` |
+| Primary Axis = MAX | `justify-content: flex-end` |
+| Counter Axis = CENTER | `align-items: center` |
+| Counter Axis = MIN | `align-items: flex-start` |
+| Counter Axis = MAX | `align-items: flex-end` |
+| Wrap = WRAP | `flex-wrap: wrap` |
+| layoutMode = GRID | Usar CSS Grid |
+
+#### Efectos y Decoración
+
+```
+border-radius:  <por esquina o valor único, ej. 8px o 4px 8px 4px 8px>
+box-shadow:     <offset-x offset-y blur spread rgba()>
+border:         <Npx solid rgba()>
+opacity:        <0..1>
+backdrop-filter: blur(Npx)  # solo si hay efecto de blur de fondo
+```
+
+#### Dimensiones y Espaciado
+
+```
+width:   <valor fijo en px, o "fill" → 100% / "hug" → fit-content>
+height:  <valor fijo en px, o "fill" → 100% / "hug" → fit-content>
+min-width / max-width: si aplica
+```
+
+#### Nombres de Nodos (semántica)
+
+Registra el nombre exacto del nodo Figma para:
+- Nombrar el componente (ej. `Button/Primary/Default` → `<PrimaryButton>`)
+- Nombrar la clase CSS (ej. `Card/Elevated` → `.card--elevated`)
+- Documentar de dónde vino el componente
+
+### Paso 5 — Validación visual (opcional)
+
+Usa `get_screenshot` para obtener la imagen final del nodo. Úsala **únicamente** para validar que el output visual es fiel al diseño — no como fuente de tokens.
+
+---
+
+## Mapeo de Tokens a Convenciones de Código
+
+### Variables CSS Globales (`:root`)
+
+```css
+/* Colores */
+--color-primary:        #3B82F6;   /* Figma: Primary/500 */
+--color-primary-hover:  #2563EB;   /* Figma: Primary/600 */
+--color-surface:        #FFFFFF;   /* Figma: Neutral/0 */
+--color-text-primary:   #111827;   /* Figma: Gray/900 */
+
+/* Tipografía */
+--font-family-base:     'Inter', sans-serif;
+--font-size-sm:         0.875rem;  /* 14px */
+--font-size-md:         1rem;      /* 16px */
+--font-weight-medium:   500;
+--font-weight-bold:     700;
+
+/* Espaciado */
+--spacing-xs:  4px;
+--spacing-sm:  8px;
+--spacing-md:  16px;
+--spacing-lg:  24px;
+```
+
+### Clases Utilitarias (Tailwind CSS)
+
+Prioridad de mapeo:
+
+1. **Token exacto en configuración** → usar clase semántica: `bg-primary-500`, `text-gray-900`
+2. **Valor estándar de Tailwind** → usar clase utilitaria: `p-4` (16px), `gap-2` (8px), `rounded-lg` (8px)
+3. **Valor no estándar** → usar valor arbitrario: `gap-[18px]`, `text-[#3B82F6]`, `rounded-[12px]`
+
+Nunca inventar una clase que no exista en la config del proyecto.
+
+### CSS-in-JS (Styled Components / Emotion)
+
+```ts
+// Mapear siempre al theme del proyecto
+color:      theme.colors.primary[500]
+fontSize:   theme.fontSizes.md
+fontWeight: theme.fontWeights.medium
+padding:    `${theme.spacing.md}px ${theme.spacing.lg}px`
+```
+
+---
+
+## Prohibiciones (no negociables)
+
+- **PROHIBIDO** usar capturas de `conventions/` como fuente de colores o tipografía
+- **PROHIBIDO** hardcodear colores o fuentes sin haberlos extraído del MCP primero
+- **PROHIBIDO** asumir valores de diseño no confirmados (`color: blue` sin saber el hex exacto)
+- **PROHIBIDO** saltarse `get_design_context` cuando existe una URL de Figma disponible
+- **PROHIBIDO** copiar literal el código de referencia devuelto por el MCP sin adaptarlo al stack del proyecto
+- **PROHIBIDO** iniciar la generación de código UI cuando no existe referencia Figma — el GATEKEEPER del Paso 0 es inquebrantable
+- **PROHIBIDO** interpretar el silencio del desarrollador (sin URL) como un permiso implícito para continuar
+
+---
+
+## En el Executor Summary
+
+Cuando se complete una tarea UI, el resumen **debe incluir**:
+
+```
+⚙️ Executor Summary
+  Figma node: [nodeId] — [nombre del nodo]
+  Tokens extraídos: [N colores, N estilos tipográficos, N auto layouts]
+  Mapeo aplicado: [CSS vars | Tailwind | CSS-in-JS]
+  Skills aplicados: [frontend-expert, ...]
+```
