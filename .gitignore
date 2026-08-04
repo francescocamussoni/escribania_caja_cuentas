@@ -29,6 +29,12 @@ dist/
 # Build artifacts
 *.log
 
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.backup
+infra/environments/prod.tfvars
+
 # spec kitti
 .cursor*
 .spec*

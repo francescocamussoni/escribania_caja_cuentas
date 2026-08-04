@@ -1,0 +1,46 @@
+# Production Terraform variables — Registro de Cajas (002-aws-deploy)
+#
+# Copy to prod.tfvars (gitignored) and adjust before apply:
+#   cp infra/environments/prod.tfvars.example infra/environments/prod.tfvars
+#
+# NEVER commit prod.tfvars with real secrets. Sensitive values (JWT, DB password,
+# admin credentials) belong in SSM Parameter Store — see quickstart.md §3.
+#
+# Architecture: lean EC2 + CloudFront + RDS (no ALB, ECS, NAT, ECR).
+# Estimated cost: ~USD 20–32/mo (research.md R10).
+
+# --- Core (root module) ---
+aws_region   = "us-east-1"
+project_name = "escribania-cajas"
+environment  = "production"
+feature      = "002-aws-deploy"
+name_prefix  = "escribania-prod"
+
+# --- Network (module vpc — T011) ---
+vpc_cidr = "10.0.0.0/16"
+
+# --- Compute (module compute — T017) ---
+ec2_instance_type  = "t4g.micro"
+ec2_root_volume_gb = 
+
+# --- Database (module rds — T013) ---
+rds_instance_class        = "db.t4g.micro"
+rds_engine_version        = "16"
+rds_allocated_storage_gb  = 20
+rds_backup_retention_days = 7
+rds_database_name         = "escribania_cajas"
+rds_multi_az              = false
+rds_master_username       = "escribania_admin"
+ssm_parameter_path_prefix = "/escribania/prod"
+
+# --- Secrets (prod.tfvars ONLY — never commit) ---
+# Copy example above to prod.tfvars and append:
+#   jwt_secret     = "<openssl rand -hex 32>"
+#   db_password    = "<openssl rand -base64 24>"
+#   admin_username = "prod-admin"
+#   admin_password = "<openssl rand -base64 16>"
+# See specs/002-aws-deploy/quickstart.md §3
+
+# --- Frontend (module frontend — T021) ---
+# S3 bucket name suffix must be globally unique; override if apply fails:
+# frontend_bucket_name_suffix = "escribania-prod-UNIQUE"

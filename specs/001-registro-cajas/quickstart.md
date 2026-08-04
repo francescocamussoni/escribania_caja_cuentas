@@ -174,17 +174,32 @@ cd frontend && npm test
 
 Wireframes de referencia: `registro_de_caja.drawio`, `consulta_de_caja.drawio`.
 
-## 11. Despliegue AWS (referencia)
+## 11. Despliegue AWS (producción)
+
+El despliegue en AWS está documentado en la feature **002-aws-deploy** (arquitectura
+lean: EC2 + CloudFront + S3 + RDS + SSM Parameter Store).
+
+**Guía completa:** [specs/002-aws-deploy/quickstart.md](../002-aws-deploy/quickstart.md)
 
 | Componente | Servicio AWS |
 |------------|--------------|
-| Frontend estático | S3 + CloudFront |
-| API | ECS Fargate (o App Runner) |
-| Base de datos | RDS PostgreSQL `db.t4g.micro` |
-| Secretos | Secrets Manager / SSM Parameter Store |
-| TLS | ACM + ALB |
+| Frontend estático | S3 + CloudFront (HTTPS) |
+| API | Docker en EC2 `t4g.micro` (origen CloudFront `/api/*`) |
+| Base de datos | RDS PostgreSQL `db.t4g.micro` (Single-AZ, backups 7 días) |
+| Secretos | SSM Parameter Store (`SecureString`) |
 
-Mismas variables de entorno que `.env`; `DATABASE_URL` apunta a RDS.
+Comandos habituales desde la raíz del repo:
+
+```bash
+make validate-infra      # terraform fmt/validate + contrato INF
+make check-secrets       # escaneo pre-merge
+make deploy-aws          # terraform + build + smoke
+make smoke-aws           # post-deploy (BASE_URL + credenciales admin)
+make preprod-checklist   # checklist §13 de 002-aws-deploy
+```
+
+Variables de entorno en producción se cargan desde SSM en el contenedor (`load-env-from-ssm.sh`);
+localmente usar `.env.example` como referencia.
 
 ## Troubleshooting
 

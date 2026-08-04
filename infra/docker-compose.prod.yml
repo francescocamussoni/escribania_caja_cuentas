@@ -1,0 +1,13 @@
+# Production Docker Compose for EC2 API host (T018).
+# Deployed to /opt/escribania/docker-compose.yml by EC2 user_data.
+# Image is loaded on the host by scripts/deploy-aws.sh (T026).
+
+services:
+  backend:
+    image: escribania-backend:latest
+    container_name: escribania-api
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env

@@ -53,6 +53,12 @@ def seed_cajas(db: Session) -> None:
 
 
 def run_seed() -> None:
+    settings = get_settings()
+    if settings.environment.lower() == "production":
+        raise RuntimeError(
+            "run_seed() must not be used in production; use bootstrap_production"
+        )
+
     db = SessionLocal()
     try:
         seed_admin_user(db)

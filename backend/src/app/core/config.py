@@ -16,6 +16,7 @@ class Settings(BaseSettings):
     admin_username: str = "admin"
     admin_password: str = "admin"
     cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173"
+    environment: str = "development"
 
     @property
     def cors_origins_list(self) -> list[str]:
