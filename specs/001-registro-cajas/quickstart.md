@@ -3,6 +3,8 @@
 **Feature**: `001-registro-cajas`  
 **Branch**: `001-registro-cajas`
 
+> Documentación operativa: [docs/README.md](../../docs/README.md) · [desarrollo local](../../docs/desarrollo-local.md) · [usuarios](../../docs/usuarios-y-contraseñas.md)
+
 ## Prerequisites
 
 - Docker & Docker Compose
@@ -179,7 +181,8 @@ Wireframes de referencia: `registro_de_caja.drawio`, `consulta_de_caja.drawio`.
 El despliegue en AWS está documentado en la feature **002-aws-deploy** (arquitectura
 lean: EC2 + CloudFront + S3 + RDS + SSM Parameter Store).
 
-**Guía completa:** [specs/002-aws-deploy/quickstart.md](../002-aws-deploy/quickstart.md)
+**Guía completa:** [docs/desarrollo-aws.md](../../docs/desarrollo-aws.md)  
+**Spec:** [specs/002-aws-deploy/quickstart.md](../002-aws-deploy/quickstart.md)
 
 | Componente | Servicio AWS |
 |------------|--------------|

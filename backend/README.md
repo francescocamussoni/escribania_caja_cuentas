@@ -1,3 +1,11 @@
-# Escribanía — Registro de Cajas (backend)
+# Backend — Registro de Cajas
 
-FastAPI API for cash box registry. See `specs/001-registro-cajas/quickstart.md`.
+API FastAPI. Documentación completa: **[../docs/backend.md](../docs/backend.md)**.
+
+```bash
+# Desde la raíz del repo
+make up && make migrate && make seed
+make test-backend
+```
+
+Swagger local: http://localhost:8000/docs

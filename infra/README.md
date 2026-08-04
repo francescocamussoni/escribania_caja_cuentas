@@ -1,5 +1,9 @@
 # Infraestructura AWS — Registro de Cajas
 
+Terraform para arquitectura lean (EC2 + CloudFront + RDS + SSM).
+
+**Documentación:** [docs/desarrollo-aws.md](../docs/desarrollo-aws.md)
+
 Terraform root module para desplegar la aplicación en **AWS us-east-1** con
 arquitectura lean: **EC2** (API Docker) + **CloudFront/S3** (frontend) + **RDS**
 (PostgreSQL) + **SSM Parameter Store** (secretos).

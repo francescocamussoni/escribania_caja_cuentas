@@ -4,6 +4,9 @@
 **Region**: `us-east-1`  
 **Prerrequisito**: Feature `001-registro-cajas` implementada y validada en local.
 
+> Documentación operativa consolidada: [docs/desarrollo-aws.md](../../docs/desarrollo-aws.md)  
+> Usuarios en producción: [docs/usuarios-y-contraseñas.md](../../docs/usuarios-y-contraseñas.md)
+
 ## 1. Prerrequisitos locales
 
 | Herramienta | Versión mínima | Uso |
@@ -116,8 +119,7 @@ Casos verificados: ver [contracts/smoke-tests.md](./contracts/smoke-tests.md).
 1. Abrir `public_url` en el navegador.
 2. Iniciar sesión con `ADMIN_USER` / `ADMIN_PASS` (rol secretaria).
 3. Verificar: 15 cajas disponibles, sin movimientos históricos.
-4. Crear usuarios adicionales (escribanos) según procedimiento documentado en
-   implementación (CLI o panel futuro).
+4. Crear usuarios adicionales (escribanos) según [docs/usuarios-y-contraseñas.md](../../docs/usuarios-y-contraseñas.md).
 
 ## 9. Actualizar aplicación (sin perder datos)
 
