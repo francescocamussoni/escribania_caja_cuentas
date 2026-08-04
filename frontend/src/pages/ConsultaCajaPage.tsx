@@ -117,8 +117,10 @@ export default function ConsultaCajaPage() {
   const isBusy = loadingCajas || loadingConsulta;
 
   return (
-    <main className="app-shell consulta-caja-page">
-      <h1>Consulta de caja</h1>
+    <>
+      <header className="page-header">
+        <h1>Consulta de caja</h1>
+      </header>
 
       {error ? <p className="form-error">{error}</p> : null}
 
@@ -131,7 +133,7 @@ export default function ConsultaCajaPage() {
         />
         <button
           type="button"
-          className="btn-consulta"
+          className="button button--primary"
           disabled={isBusy || !selectedCajaId}
           onClick={handleConsulta}
         >
@@ -158,6 +160,6 @@ export default function ConsultaCajaPage() {
           />
         </>
       ) : null}
-    </main>
+    </>
   );
 }

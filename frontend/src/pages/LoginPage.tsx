@@ -29,39 +29,47 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="app-shell login-page">
-      <h1>Iniciar sesión</h1>
-      <form onSubmit={handleSubmit}>
-        <label htmlFor="username">Usuario</label>
-        <input
-          id="username"
-          name="username"
-          type="text"
-          autoComplete="username"
-          value={username}
-          disabled={submitting}
-          onChange={(event) => setUsername(event.target.value)}
-          required
-        />
+    <div className="login-page">
+      <form className="login-card" onSubmit={handleSubmit}>
+        <h1>Escribanía Barat</h1>
+        <p className="login-card__subtitle">Caja y cuentas</p>
 
-        <label htmlFor="password">Contraseña</label>
-        <input
-          id="password"
-          name="password"
-          type="password"
-          autoComplete="current-password"
-          value={password}
-          disabled={submitting}
-          onChange={(event) => setPassword(event.target.value)}
-          required
-        />
+        <label className="field">
+          <span>Usuario</span>
+          <input
+            name="username"
+            type="text"
+            autoComplete="username"
+            value={username}
+            disabled={submitting}
+            onChange={(event) => setUsername(event.target.value)}
+            required
+          />
+        </label>
+
+        <label className="field">
+          <span>Contraseña</span>
+          <input
+            name="password"
+            type="password"
+            autoComplete="current-password"
+            value={password}
+            disabled={submitting}
+            onChange={(event) => setPassword(event.target.value)}
+            required
+          />
+        </label>
 
         {error ? <p className="form-error">{error}</p> : null}
 
-        <button type="submit" disabled={submitting}>
+        <button
+          type="submit"
+          className="button button--primary"
+          disabled={submitting}
+        >
           {submitting ? "Ingresando…" : "Ingresar"}
         </button>
       </form>
-    </main>
+    </div>
   );
 }

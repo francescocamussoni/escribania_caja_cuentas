@@ -1,5 +1,6 @@
-import { Link, Navigate, Outlet, Route, Routes } from "react-router-dom";
+import { Navigate, Outlet, Route, Routes } from "react-router-dom";
 
+import { Navbar } from "./components/layout/Navbar";
 import { useAuth } from "./hooks/useAuth";
 import ConsultaCajaPage from "./pages/ConsultaCajaPage";
 import LoginPage from "./pages/LoginPage";
@@ -36,19 +37,12 @@ function SecretariaOnlyRoute({ children }: { children: JSX.Element }) {
 }
 
 function AppLayout() {
-  const { rol } = useAuth();
-
   return (
-    <div className="app-layout">
-      <header className="app-header">
-        <nav className="app-nav" aria-label="Navegación principal">
-          {rol === "secretaria" ? (
-            <Link to="/registro">Registro</Link>
-          ) : null}
-          <Link to="/consulta">Consulta</Link>
-        </nav>
-      </header>
-      <Outlet />
+    <div className="app-shell">
+      <Navbar />
+      <main className="app-main">
+        <Outlet />
+      </main>
     </div>
   );
 }

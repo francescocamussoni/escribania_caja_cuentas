@@ -12,6 +12,7 @@ import { apiPost, getAuthToken, setAuthToken } from "../services/api";
 
 const TOKEN_KEY = "auth_token";
 const ROL_KEY = "auth_rol";
+const USERNAME_KEY = "auth_username";
 
 export type LoginResponse = {
   access_token: string;
@@ -23,6 +24,7 @@ export type LoginResponse = {
 type AuthState = {
   token: string | null;
   rol: string | null;
+  username: string | null;
 };
 
 type AuthContextValue = AuthState & {
@@ -35,13 +37,15 @@ function readStoredAuth(): AuthState {
   return {
     token: sessionStorage.getItem(TOKEN_KEY),
     rol: sessionStorage.getItem(ROL_KEY),
+    username: sessionStorage.getItem(USERNAME_KEY),
   };
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [{ token, rol }, setAuthState] = useState<AuthState>(readStoredAuth);
+  const [{ token, rol, username }, setAuthState] =
+    useState<AuthState>(readStoredAuth);
 
   useEffect(() => {
     setAuthToken(token);
@@ -54,27 +58,34 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
     sessionStorage.setItem(TOKEN_KEY, response.access_token);
     sessionStorage.setItem(ROL_KEY, response.rol);
+    sessionStorage.setItem(USERNAME_KEY, username);
     setAuthToken(response.access_token);
-    setAuthState({ token: response.access_token, rol: response.rol });
+    setAuthState({
+      token: response.access_token,
+      rol: response.rol,
+      username,
+    });
     return response;
   }, []);
 
   const logout = useCallback(() => {
     sessionStorage.removeItem(TOKEN_KEY);
     sessionStorage.removeItem(ROL_KEY);
+    sessionStorage.removeItem(USERNAME_KEY);
     setAuthToken(null);
-    setAuthState({ token: null, rol: null });
+    setAuthState({ token: null, rol: null, username: null });
   }, []);
 
   const value = useMemo<AuthContextValue>(
     () => ({
       token,
       rol,
+      username,
       isAuthenticated: Boolean(token ?? getAuthToken()),
       login,
       logout,
     }),
-    [token, rol, login, logout],
+    [token, rol, username, login, logout],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

@@ -14,10 +14,9 @@ export default function CajaSelector({
   disabled = false,
 }: CajaSelectorProps) {
   return (
-    <div className="caja-selector">
-      <label htmlFor="caja-select">Caja</label>
+    <label className="field caja-selector">
+      <span>Caja</span>
       <select
-        id="caja-select"
         value={selectedCajaId ?? ""}
         disabled={disabled || cajas.length === 0}
         onChange={(event) => onChange(Number(event.target.value))}
@@ -31,6 +30,6 @@ export default function CajaSelector({
           </option>
         ))}
       </select>
-    </div>
+    </label>
   );
 }

@@ -115,14 +115,20 @@ export default function RegistroCajaPage() {
     }
   }
 
-  async function handleCreateMovimiento(payload: CreateMovimientoPayload) {
+  async function handleCreateMovimiento(
+    payload: CreateMovimientoPayload,
+    additionalCajaIds: number[],
+  ) {
     if (!selectedCajaId) {
       return;
     }
 
-    await apiPost<Movimiento>(
-      `/api/v1/cajas/${selectedCajaId}/movimientos`,
-      payload,
+    const targetCajaIds = [selectedCajaId, ...additionalCajaIds];
+
+    await Promise.all(
+      targetCajaIds.map((cajaId) =>
+        apiPost<Movimiento>(`/api/v1/cajas/${cajaId}/movimientos`, payload),
+      ),
     );
     await loadCajaData(selectedCajaId, 1);
   }
@@ -195,8 +201,10 @@ export default function RegistroCajaPage() {
   }
 
   return (
-    <main className="app-shell registro-caja-page">
-      <h1>Registro de caja</h1>
+    <>
+      <header className="page-header">
+        <h1>Registro de caja</h1>
+      </header>
 
       {error ? <p className="form-error">{error}</p> : null}
 
@@ -214,56 +222,68 @@ export default function RegistroCajaPage() {
         </p>
       </section>
 
-      <MovimientoForm onSubmit={handleCreateMovimiento} disabled={loading} />
+      <MovimientoForm
+        cajas={cajas}
+        activeCajaId={selectedCajaId}
+        onSubmit={handleCreateMovimiento}
+        disabled={loading}
+      />
 
       {editingMovimiento ? (
         <section className="movimiento-edit-panel">
           <h2>Editar movimiento</h2>
           <form onSubmit={handleSaveEdit}>
-            <label htmlFor="edit-descripcion">Descripción</label>
-            <input
-              id="edit-descripcion"
-              name="edit-descripcion"
-              type="text"
-              value={editDescripcion}
-              disabled={loading}
-              onChange={(event) => setEditDescripcion(event.target.value)}
-              required
-            />
+            <label className="field">
+              <span>Descripción</span>
+              <input
+                name="edit-descripcion"
+                type="text"
+                value={editDescripcion}
+                disabled={loading}
+                onChange={(event) => setEditDescripcion(event.target.value)}
+                required
+              />
+            </label>
 
-            <label htmlFor="edit-monto">Monto</label>
-            <input
-              id="edit-monto"
-              name="edit-monto"
-              type="text"
-              inputMode="decimal"
-              value={editMonto}
-              disabled={loading}
-              onChange={(event) => setEditMonto(event.target.value)}
-              required
-            />
+            <label className="field">
+              <span>Monto</span>
+              <input
+                name="edit-monto"
+                type="text"
+                inputMode="decimal"
+                value={editMonto}
+                disabled={loading}
+                onChange={(event) => setEditMonto(event.target.value)}
+                required
+              />
+            </label>
 
-            <label htmlFor="edit-tipo">Tipo</label>
-            <select
-              id="edit-tipo"
-              name="edit-tipo"
-              value={editTipo}
-              disabled={loading}
-              onChange={(event) =>
-                setEditTipo(event.target.value as "entrada" | "salida")
-              }
-            >
-              <option value="entrada">Entrada</option>
-              <option value="salida">Salida</option>
-            </select>
+            <label className="field">
+              <span>Tipo</span>
+              <select
+                name="edit-tipo"
+                value={editTipo}
+                disabled={loading}
+                onChange={(event) =>
+                  setEditTipo(event.target.value as "entrada" | "salida")
+                }
+              >
+                <option value="entrada">Entrada</option>
+                <option value="salida">Salida</option>
+              </select>
+            </label>
 
             <div className="movimiento-edit-actions">
-              <button type="submit" disabled={loading}>
+              <button
+                type="submit"
+                className="button button--primary"
+                disabled={loading}
+              >
                 Guardar
               </button>
               <button
                 type="button"
-                className="btn-secondary"
+                className="button button--secondary"
                 disabled={loading}
                 onClick={handleCancelEdit}
               >
@@ -286,6 +306,6 @@ export default function RegistroCajaPage() {
         onPageChange={handlePageChange}
         disabled={loading}
       />
-    </main>
+    </>
   );
 }
