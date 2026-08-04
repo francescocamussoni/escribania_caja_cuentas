@@ -1,0 +1,89 @@
+# Registro de Cajas — Escribanía
+# Local fullstack: PostgreSQL + FastAPI backend + React frontend
+# Requires backend/Dockerfile (T007) and frontend/Dockerfile (T007) to build app images.
+
+name: escribania-cajas
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: escribania_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-escribania}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-escribania}
+      POSTGRES_DB: ${POSTGRES_DB:-escribania_cajas}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${POSTGRES_USER:-escribania} -d ${POSTGRES_DB:-escribania_cajas}",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    networks:
+      - escribania_net
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: escribania_backend
+    restart: unless-stopped
+    ports:
+      - "${BACKEND_PORT:-8000}:8000"
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-escribania}:${POSTGRES_PASSWORD:-escribania}@postgres:5432/${POSTGRES_DB:-escribania_cajas}
+      JWT_SECRET: ${JWT_SECRET:-change-me-use-openssl-rand-hex-32}
+      JWT_EXPIRE_HOURS: ${JWT_EXPIRE_HOURS:-8}
+      ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173,http://127.0.0.1:5173}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')\""]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    networks:
+      - escribania_net
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: escribania_frontend
+    restart: unless-stopped
+    ports:
+      - "${FRONTEND_PORT:-5173}:5173"
+    environment:
+      # Empty = same-origin requests; Vite proxies /api to the backend (no CORS issues).
+      VITE_API_BASE_URL: ${VITE_API_BASE_URL:-}
+      VITE_PROXY_TARGET: ${VITE_PROXY_TARGET:-http://backend:8000}
+    volumes:
+      - ./frontend/src:/app/src
+      - ./frontend/index.html:/app/index.html
+      - ./frontend/vite.config.ts:/app/vite.config.ts
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - escribania_net
+
+volumes:
+  postgres_data:
+    name: escribania_postgres_data
+
+networks:
+  escribania_net:
+    name: escribania_net
+    driver: bridge

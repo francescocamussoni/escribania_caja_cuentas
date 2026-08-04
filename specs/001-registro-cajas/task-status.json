@@ -1,0 +1,279 @@
+{
+  "feature": "001-registro-cajas",
+  "updated": "2026-08-03",
+  "amend_note": "2026-08-03 \u2014 edici\u00f3n/eliminaci\u00f3n 24h + Makefile/docker-compose",
+  "tasks": {
+    "T001": {
+      "status": "done",
+      "completed_at": "2026-08-03"
+    },
+    "T002": {
+      "status": "done",
+      "completed_at": "2026-08-03"
+    },
+    "T003": {
+      "status": "done",
+      "completed_at": "2026-08-03"
+    },
+    "T004": {
+      "status": "done",
+      "completed_at": "2026-08-03"
+    },
+    "T005": {
+      "status": "done",
+      "completed_at": "2026-08-03"
+    },
+    "T006": {
+      "status": "done",
+      "completed_at": "2026-08-03"
+    },
+    "T007": {
+      "status": "done",
+      "completed_at": "2026-08-03"
+    },
+    "T008": {
+      "status": "done",
+      "completed_at": "2026-08-03"
+    },
+    "T009": {
+      "status": "done",
+      "completed_at": "2026-08-03"
+    },
+    "T010": {
+      "status": "done",
+      "completed_at": "2026-08-03"
+    },
+    "T011": {
+      "status": "done",
+      "completed_at": "2026-08-03"
+    },
+    "T012": {
+      "status": "done",
+      "completed_at": "2026-08-03"
+    },
+    "T013": {
+      "status": "done",
+      "completed_at": "2026-08-03"
+    },
+    "T014": {
+      "status": "done",
+      "completed_at": "2026-08-03"
+    },
+    "T015": {
+      "status": "done",
+      "completed_at": "2026-08-03"
+    },
+    "T016": {
+      "status": "done",
+      "completed_at": "2026-08-03"
+    },
+    "T017": {
+      "status": "done",
+      "completed_at": "2026-08-03"
+    },
+    "T018": {
+      "status": "done",
+      "completed_at": "2026-08-03"
+    },
+    "T019": {
+      "status": "done",
+      "completed_at": "2026-08-03"
+    },
+    "T020": {
+      "status": "done",
+      "completed_at": "2026-08-03"
+    },
+    "T021": {
+      "status": "done",
+      "completed_at": "2026-08-03"
+    },
+    "T022": {
+      "status": "done",
+      "completed_at": "2026-08-03"
+    },
+    "T023": {
+      "status": "done",
+      "completed_at": "2026-08-03"
+    },
+    "T024": {
+      "status": "done",
+      "completed_at": "2026-08-03"
+    },
+    "T025": {
+      "status": "done",
+      "completed_at": "2026-08-03"
+    },
+    "T026": {
+      "status": "done",
+      "completed_at": "2026-08-03"
+    },
+    "T027": {
+      "status": "done",
+      "completed_at": "2026-08-03"
+    },
+    "T028": {
+      "status": "done",
+      "completed_at": "2026-08-03"
+    },
+    "T029": {
+      "status": "done",
+      "completed_at": "2026-08-03"
+    },
+    "T030": {
+      "status": "done",
+      "completed_at": "2026-08-03"
+    },
+    "T031": {
+      "status": "done",
+      "completed_at": "2026-08-03"
+    },
+    "T032": {
+      "status": "done",
+      "completed_at": "2026-08-03"
+    },
+    "T033": {
+      "status": "done",
+      "completed_at": "2026-08-03"
+    },
+    "T034": {
+      "status": "done",
+      "completed_at": "2026-08-03"
+    },
+    "T035": {
+      "status": "done",
+      "completed_at": "2026-08-03"
+    },
+    "T036": {
+      "status": "done",
+      "completed_at": "2026-08-03"
+    },
+    "T037": {
+      "status": "done",
+      "completed_at": "2026-08-03"
+    },
+    "T038": {
+      "status": "done",
+      "completed_at": "2026-08-03"
+    },
+    "T039": {
+      "status": "done",
+      "completed_at": "2026-08-03"
+    },
+    "T040": {
+      "status": "done",
+      "completed_at": "2026-08-03"
+    },
+    "T041": {
+      "status": "done",
+      "completed_at": "2026-08-03"
+    },
+    "T042": {
+      "status": "done",
+      "completed_at": "2026-08-03"
+    },
+    "T043": {
+      "status": "done",
+      "completed_at": "2026-08-03"
+    },
+    "T044": {
+      "status": "done",
+      "completed_at": "2026-08-03"
+    },
+    "T045": {
+      "status": "done",
+      "completed_at": "2026-08-03"
+    },
+    "T046": {
+      "status": "done",
+      "completed_at": "2026-08-03"
+    },
+    "T047": {
+      "status": "done",
+      "completed_at": "2026-08-03"
+    },
+    "T048": {
+      "status": "done",
+      "completed_at": "2026-08-03"
+    },
+    "T049": {
+      "status": "done",
+      "completed_at": "2026-08-03"
+    },
+    "T050": {
+      "status": "done",
+      "completed_at": "2026-08-03"
+    },
+    "T051": {
+      "status": "done",
+      "completed_at": "2026-08-03"
+    },
+    "T052": {
+      "status": "done",
+      "completed_at": "2026-08-03"
+    },
+    "T053": {
+      "status": "done",
+      "completed_at": "2026-08-03"
+    },
+    "T054": {
+      "status": "done",
+      "completed_at": "2026-08-03"
+    },
+    "T055": {
+      "status": "done",
+      "completed_at": "2026-08-03"
+    },
+    "T056": {
+      "status": "done",
+      "completed_at": "2026-08-03"
+    },
+    "T057": {
+      "status": "done",
+      "completed_at": "2026-08-03"
+    },
+    "T058": {
+      "status": "done",
+      "completed_at": "2026-08-03"
+    },
+    "T059": {
+      "status": "done",
+      "completed_at": "2026-08-03"
+    },
+    "T060": {
+      "status": "done",
+      "completed_at": "2026-08-03"
+    },
+    "T061": {
+      "status": "done",
+      "completed_at": "2026-08-03"
+    },
+    "T062": {
+      "status": "done",
+      "completed_at": "2026-08-03"
+    },
+    "T063": {
+      "status": "done",
+      "completed_at": "2026-08-03"
+    },
+    "T064": {
+      "status": "done",
+      "completed_at": "2026-08-03"
+    },
+    "T065": {
+      "status": "done",
+      "completed_at": "2026-08-03"
+    },
+    "T066": {
+      "status": "done",
+      "completed_at": "2026-08-03"
+    },
+    "T067": {
+      "status": "done",
+      "completed_at": "2026-08-03"
+    },
+    "T068": {
+      "status": "done",
+      "completed_at": "2026-08-03"
+    }
+  }
+}

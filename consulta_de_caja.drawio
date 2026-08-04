@@ -4,15 +4,6 @@
       <root>
         <mxCell id="0" />
         <mxCell id="1" parent="0" />
-        <mxCell id="LMUj1KTP6e0SWPzLEOv5-1" parent="1" style="rounded=0;whiteSpace=wrap;html=1;" value="campo de texto del usuario" vertex="1">
-          <mxGeometry height="50" width="220" x="160" y="100" as="geometry" />
-        </mxCell>
-        <mxCell id="LMUj1KTP6e0SWPzLEOv5-2" parent="1" style="rounded=0;whiteSpace=wrap;html=1;" value="entrada" vertex="1">
-          <mxGeometry height="50" width="120" x="390" y="100" as="geometry" />
-        </mxCell>
-        <mxCell id="LMUj1KTP6e0SWPzLEOv5-3" parent="1" style="rounded=0;whiteSpace=wrap;html=1;" value="salida" vertex="1">
-          <mxGeometry height="50" width="110" x="523" y="100" as="geometry" />
-        </mxCell>
         <mxCell id="LMUj1KTP6e0SWPzLEOv5-4" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;rounded=0;fontColor=light-dark(#000000,#FF3333);" value="texto_usuario_1" vertex="1">
           <mxGeometry height="30" width="60" x="180" y="190" as="geometry" />
         </mxCell>
@@ -71,10 +62,16 @@
           <mxGeometry height="30" width="110" x="420" y="160" as="geometry" />
         </mxCell>
         <mxCell id="LMUj1KTP6e0SWPzLEOv5-23" parent="1" style="rounded=0;whiteSpace=wrap;html=1;" value="Selector de caja" vertex="1">
-          <mxGeometry height="40" width="475" x="160" y="50" as="geometry" />
+          <mxGeometry height="40" width="350" x="160" y="50" as="geometry" />
         </mxCell>
         <mxCell id="LMUj1KTP6e0SWPzLEOv5-24" parent="1" style="rounded=0;whiteSpace=wrap;html=1;" value="Selector de pagina" vertex="1">
           <mxGeometry height="40" width="475" x="160" y="320" as="geometry" />
+        </mxCell>
+        <mxCell id="LMUj1KTP6e0SWPzLEOv5-27" parent="1" style="rounded=0;whiteSpace=wrap;html=1;" value="consulta" vertex="1">
+          <mxGeometry height="40" width="115" x="520" y="50" as="geometry" />
+        </mxCell>
+        <mxCell id="LMUj1KTP6e0SWPzLEOv5-28" parent="1" style="rounded=0;whiteSpace=wrap;html=1;" value="VALOR DE CAJA" vertex="1">
+          <mxGeometry height="40" width="475" x="160" y="105" as="geometry" />
         </mxCell>
       </root>
     </mxGraphModel>

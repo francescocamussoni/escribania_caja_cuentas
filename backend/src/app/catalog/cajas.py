@@ -1,0 +1,17 @@
+CAJAS_CATALOG: list[dict[str, str]] = [
+    {"nombre": "Bambina", "slug": "bambina"},
+    {"nombre": "Ebel", "slug": "ebel"},
+    {"nombre": "Martin", "slug": "martin"},
+    {"nombre": "Gimnasio", "slug": "gimnasio"},
+    {"nombre": "Gabriel", "slug": "gabriel"},
+    {"nombre": "Costanza", "slug": "costanza"},
+    {"nombre": "Guille", "slug": "guille"},
+    {"nombre": "Intimayu", "slug": "intimayu"},
+    {"nombre": "Amelia", "slug": "amelia"},
+    {"nombre": "Entre Rios", "slug": "entre-rios"},
+    {"nombre": "Chovet", "slug": "chovet"},
+    {"nombre": "Maria Teresa", "slug": "maria-teresa"},
+    {"nombre": "Barat Hermanos", "slug": "barat-hermanos"},
+    {"nombre": "General Lagos", "slug": "general-lagos"},
+    {"nombre": "Fideicomiso", "slug": "fideicomiso"},
+]

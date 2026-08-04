@@ -1,0 +1,248 @@
+:root {
+  font-family: system-ui, -apple-system, sans-serif;
+  line-height: 1.5;
+  color: #1a1a1a;
+  background: #f5f5f5;
+}
+
+body {
+  margin: 0;
+}
+
+.app-shell {
+  max-width: 960px;
+  margin: 2rem auto;
+  padding: 1.5rem;
+  background: #fff;
+  border-radius: 8px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+}
+
+label {
+  display: block;
+  margin-top: 0.75rem;
+  font-weight: 500;
+}
+
+input,
+select {
+  width: 100%;
+  margin-top: 0.25rem;
+  padding: 0.5rem;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  box-sizing: border-box;
+}
+
+button {
+  margin-top: 0.75rem;
+  padding: 0.5rem 1rem;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  background: #2563eb;
+  color: #fff;
+}
+
+button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.form-error {
+  color: #ff3333;
+}
+
+.caja-selector {
+  margin-bottom: 1rem;
+}
+
+.saldo-panel {
+  margin: 1.5rem 0;
+  padding: 1rem;
+  background: #f8fafc;
+  border-radius: 6px;
+}
+
+.saldo-panel h2 {
+  margin: 0 0 0.5rem;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.saldo-valor {
+  margin: 0;
+  font-size: 1.5rem;
+  font-weight: 700;
+}
+
+.movimiento-form-actions {
+  display: flex;
+  gap: 0.75rem;
+}
+
+.btn-entrada {
+  background: #006600;
+}
+
+.btn-salida {
+  background: #ff3333;
+}
+
+.movimiento-table {
+  width: 100%;
+  margin-top: 1.5rem;
+  border-collapse: collapse;
+}
+
+.movimiento-table th,
+.movimiento-table td {
+  padding: 0.5rem;
+  border-bottom: 1px solid #e5e7eb;
+  text-align: left;
+  vertical-align: middle;
+}
+
+.movimiento-table th:nth-child(2),
+.movimiento-table th:nth-child(3),
+.movimiento-table td:nth-child(2),
+.movimiento-table td:nth-child(3) {
+  text-align: right;
+}
+
+.movimiento-table-empty {
+  text-align: center;
+  color: #6b7280;
+}
+
+.movimiento-entrada {
+  color: #006600;
+  font-weight: 600;
+}
+
+.movimiento-salida {
+  color: #ff3333;
+  font-weight: 600;
+}
+
+.movimiento-table-actions-header,
+.movimiento-table-actions {
+  width: 1%;
+  white-space: nowrap;
+}
+
+.movimiento-table-actions-inner {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.btn-table-action {
+  margin: 0;
+  padding: 0.3rem 0.75rem;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  line-height: 1.25;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.btn-table-action-edit {
+  background: #2563eb;
+  color: #fff;
+}
+
+.btn-table-action-edit:hover {
+  background: #1d4ed8;
+}
+
+.btn-table-action-delete {
+  background: #fff;
+  color: #dc2626;
+  border-color: #dc2626;
+}
+
+.btn-table-action-delete:hover {
+  background: #fef2f2;
+}
+
+.pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.pagination button {
+  margin: 0;
+}
+
+.app-layout {
+  min-height: 100vh;
+}
+
+.app-header {
+  background: #fff;
+  border-bottom: 1px solid #e5e7eb;
+  padding: 0.75rem 1.5rem;
+}
+
+.app-nav {
+  display: flex;
+  gap: 1rem;
+  max-width: 960px;
+  margin: 0 auto;
+}
+
+.app-nav a {
+  color: #2563eb;
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.app-nav a:hover {
+  text-decoration: underline;
+}
+
+.consulta-controls {
+  display: flex;
+  align-items: flex-end;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.consulta-controls .caja-selector {
+  flex: 1;
+  min-width: 200px;
+  margin-bottom: 0;
+}
+
+.btn-consulta {
+  margin-top: 0.75rem;
+  background: #2563eb;
+}
+
+.movimiento-edit-panel {
+  margin: 1.5rem 0;
+  padding: 1rem;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  background: #f8fafc;
+}
+
+.movimiento-edit-panel h2 {
+  margin: 0 0 0.75rem;
+  font-size: 1rem;
+}
+
+.movimiento-edit-actions {
+  display: flex;
+  gap: 0.75rem;
+}
+
+.btn-secondary {
+  background: #6b7280;
+}

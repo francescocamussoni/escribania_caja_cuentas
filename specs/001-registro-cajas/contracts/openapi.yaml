@@ -1,0 +1,409 @@
+openapi: 3.0.3
+info:
+  title: Registro de Cajas — Escribanía API
+  version: 1.1.0
+  description: API REST para registro y consulta de movimientos de caja. v1.1 añade edición/eliminación 24h (secretaria).
+
+servers:
+  - url: http://localhost:8000
+    description: Desarrollo local
+
+tags:
+  - name: auth
+  - name: cajas
+  - name: movimientos
+
+paths:
+  /api/v1/auth/login:
+    post:
+      tags: [auth]
+      summary: Iniciar sesión
+      operationId: login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Login exitoso
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/v1/cajas:
+    get:
+      tags: [cajas]
+      summary: Listar cajas del catálogo
+      operationId: listCajas
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Lista de 15 cajas
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Caja'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/v1/cajas/{cajaId}/saldo:
+    get:
+      tags: [cajas]
+      summary: Obtener saldo actual de una caja
+      operationId: getCajaSaldo
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/CajaId'
+      responses:
+        '200':
+          description: Saldo actual
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CajaSaldoResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/cajas/{cajaId}/movimientos:
+    get:
+      tags: [movimientos]
+      summary: Listar movimientos paginados (más recientes primero)
+      operationId: listMovimientos
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/CajaId'
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: page_size
+          in: query
+          schema:
+            type: integer
+            enum: [20]
+            default: 20
+      responses:
+        '200':
+          description: Página de movimientos
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedMovimientos'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    post:
+      tags: [movimientos]
+      summary: Registrar entrada o salida (solo Secretaria)
+      operationId: createMovimiento
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/CajaId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateMovimientoRequest'
+      responses:
+        '201':
+          description: Movimiento creado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Movimiento'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/cajas/{cajaId}/movimientos/{movimientoId}:
+    patch:
+      tags: [movimientos]
+      summary: Editar movimiento (solo Secretaria, ventana 24h)
+      operationId: updateMovimiento
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/CajaId'
+        - $ref: '#/components/parameters/MovimientoId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateMovimientoRequest'
+      responses:
+        '200':
+          description: Movimiento actualizado; subtotales posteriores recalculados
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Movimiento'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          description: Ventana de 24h expirada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    delete:
+      tags: [movimientos]
+      summary: Eliminar movimiento (solo Secretaria, ventana 24h)
+      operationId: deleteMovimiento
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/CajaId'
+        - $ref: '#/components/parameters/MovimientoId'
+      responses:
+        '204':
+          description: Movimiento eliminado; subtotales posteriores recalculados
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          description: Ventana de 24h expirada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /health:
+    get:
+      summary: Health check
+      operationId: healthCheck
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ok
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  parameters:
+    CajaId:
+      name: cajaId
+      in: path
+      required: true
+      schema:
+        type: integer
+        minimum: 1
+
+    MovimientoId:
+      name: movimientoId
+      in: path
+      required: true
+      schema:
+        type: integer
+        minimum: 1
+
+  schemas:
+    LoginRequest:
+      type: object
+      required: [username, password]
+      additionalProperties: false
+      properties:
+        username:
+          type: string
+          minLength: 1
+          maxLength: 50
+        password:
+          type: string
+          minLength: 1
+
+    LoginResponse:
+      type: object
+      required: [access_token, token_type, expires_in, rol]
+      properties:
+        access_token:
+          type: string
+        token_type:
+          type: string
+          example: bearer
+        expires_in:
+          type: integer
+          description: Segundos hasta expiración (28800 = 8h)
+          example: 28800
+        rol:
+          type: string
+          enum: [secretaria, escribano]
+
+    Caja:
+      type: object
+      required: [id, nombre, slug]
+      properties:
+        id:
+          type: integer
+        nombre:
+          type: string
+        slug:
+          type: string
+
+    CajaSaldoResponse:
+      type: object
+      required: [caja, saldo_actual]
+      properties:
+        caja:
+          $ref: '#/components/schemas/Caja'
+        saldo_actual:
+          type: string
+          description: Decimal con 2 decimales (ARS)
+          example: "12500.00"
+        ultimo_movimiento_at:
+          type: string
+          format: date-time
+          nullable: true
+
+    Movimiento:
+      type: object
+      required: [id, descripcion, monto, tipo, subtotal, fecha, editable, caja]
+      properties:
+        id:
+          type: integer
+        descripcion:
+          type: string
+        monto:
+          type: string
+          example: "5000.00"
+        tipo:
+          type: string
+          enum: [entrada, salida]
+        subtotal:
+          type: string
+          example: "12500.00"
+        fecha:
+          type: string
+          format: date-time
+        editable:
+          type: boolean
+          description: true si created_at < 24h y usuario es secretaria
+        caja:
+          $ref: '#/components/schemas/Caja'
+
+    UpdateMovimientoRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        descripcion:
+          type: string
+          minLength: 1
+          maxLength: 500
+        monto:
+          type: string
+          pattern: '^\d+(\.\d{1,2})?$'
+        tipo:
+          type: string
+          enum: [entrada, salida]
+      minProperties: 1
+
+    CreateMovimientoRequest:
+      type: object
+      required: [descripcion, monto, tipo]
+      additionalProperties: false
+      properties:
+        descripcion:
+          type: string
+          minLength: 1
+          maxLength: 500
+        monto:
+          type: string
+          pattern: '^\d+(\.\d{1,2})?$'
+          example: "5000.00"
+        tipo:
+          type: string
+          enum: [entrada, salida]
+
+    PaginatedMovimientos:
+      type: object
+      required: [items, page, page_size, total_items, total_pages]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Movimiento'
+        page:
+          type: integer
+        page_size:
+          type: integer
+          enum: [20]
+        total_items:
+          type: integer
+        total_pages:
+          type: integer
+
+    ErrorResponse:
+      type: object
+      required: [detail]
+      properties:
+        detail:
+          type: string
+
+  responses:
+    BadRequest:
+      description: Validación fallida
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Unauthorized:
+      description: No autenticado o token expirado
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Forbidden:
+      description: Rol sin permiso (ej. Escribano intenta escribir)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    NotFound:
+      description: Recurso no encontrado
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
