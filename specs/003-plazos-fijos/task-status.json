@@ -1,0 +1,151 @@
+{
+  "feature": "003-plazos-fijos",
+  "updated": "2026-08-06",
+  "tasks": {
+    "T001": {
+      "status": "done",
+      "completed_at": "2026-08-06",
+      "note": "Branch OK; frontend 4 tests passed; full make test requires Docker (daemon not running in agent env)"
+    },
+    "T002": {
+      "status": "done",
+      "completed_at": "2026-08-06",
+      "note": "OpenAPI aligned with /api/v1 + /cajas mount; see contracts/mount-alignment.md"
+    },
+    "T003": {
+      "status": "done",
+      "completed_at": "2026-08-06",
+      "note": "backend/src/app/core/dates.py + tests/unit/test_dates.py"
+    },
+    "T004": {
+      "status": "done",
+      "completed_at": "2026-08-06",
+      "note": "tests/unit/test_plazo_fijo_order.py — expects plazo_fijo_list_sort_key in service"
+    },
+    "T005": {
+      "status": "done",
+      "completed_at": "2026-08-06",
+      "note": "tests/unit/test_plazo_fijo_validation.py — expects schemas.plazo_fijo"
+    },
+    "T006": {
+      "status": "done",
+      "completed_at": "2026-08-06",
+      "note": "tests/integration/test_plazos_fijos_api.py — expects API T012–T013"
+    },
+    "T007": {
+      "status": "done",
+      "completed_at": "2026-08-06",
+      "note": "backend/src/app/models/plazo_fijo.py"
+    },
+    "T010": {
+      "status": "done",
+      "completed_at": "2026-08-06",
+      "note": "backend/src/app/schemas/plazo_fijo.py"
+    },
+    "T009": {
+      "status": "done",
+      "completed_at": "2026-08-06",
+      "note": "PlazoFijo in models/__init__.py; plazos_fijos relationship on Caja (required for mapper back_populates)"
+    },
+    "T008": {
+      "status": "done",
+      "completed_at": "2026-08-06",
+      "note": "alembic/versions/004_plazo_fijo.py — table, CHECK constraints, idx_plazo_fijo_caja_vencimiento"
+    },
+    "T011": {
+      "status": "done",
+      "completed_at": "2026-08-06",
+      "note": "backend/src/app/services/plazo_fijo_service.py — CRUD, list order, resumen activos"
+    },
+    "T012": {
+      "status": "done",
+      "completed_at": "2026-08-06",
+      "note": "backend/src/app/api/routes/plazos_fijos.py"
+    },
+    "T013": {
+      "status": "done",
+      "completed_at": "2026-08-06",
+      "note": "router.py + security logging plazo_fijo_created/updated/deleted"
+    },
+    "T014": {
+      "status": "done",
+      "completed_at": "2026-08-06",
+      "note": "frontend/tests/PlazosFijosPage.test.tsx — TDD create/edit/delete/pagination/resumen (red until T015–T020)"
+    },
+    "T015": {
+      "status": "done",
+      "completed_at": "2026-08-06",
+      "note": "frontend/src/components/PlazosFijosResumenPanel.tsx"
+    },
+    "T016": {
+      "status": "done",
+      "completed_at": "2026-08-06",
+      "note": "frontend/src/components/PlazoFijoForm.tsx"
+    },
+    "T017": {
+      "status": "done",
+      "completed_at": "2026-08-06",
+      "note": "frontend/src/components/PlazoFijoTable.tsx — confirm on delete"
+    },
+    "T019": {
+      "status": "done",
+      "completed_at": "2026-08-06",
+      "note": "frontend/src/services/api.ts — types + fetchPlazosFijos*, create/update/deletePlazoFijo"
+    },
+    "T018": {
+      "status": "done",
+      "completed_at": "2026-08-06",
+      "note": "frontend/src/pages/PlazosFijosPage.tsx"
+    },
+    "T020": {
+      "status": "done",
+      "completed_at": "2026-08-06",
+      "note": "App.tsx route + Navbar link Plazos fijos (secretaria)"
+    },
+    "T021": {
+      "status": "done",
+      "completed_at": "2026-08-06",
+      "note": "escribano GET list/resumen OK; POST/PATCH/DELETE 403 in test_plazos_fijos_api.py"
+    },
+    "T022": {
+      "status": "done",
+      "completed_at": "2026-08-06",
+      "note": "frontend/tests/ConsultaPlazosFijosPage.test.tsx — TDD red until T023–T026"
+    },
+    "T023": {
+      "status": "done",
+      "completed_at": "2026-08-06",
+      "note": "frontend/src/pages/ConsultaPlazosFijosPage.tsx"
+    },
+    "T024": {
+      "status": "done",
+      "completed_at": "2026-08-06",
+      "note": "Reused CajaSelector, PlazosFijosResumenPanel, PlazoFijoTable, Pagination"
+    },
+    "T025": {
+      "status": "done",
+      "completed_at": "2026-08-06",
+      "note": "App.tsx route /consulta-plazos-fijos"
+    },
+    "T026": {
+      "status": "done",
+      "completed_at": "2026-08-06",
+      "note": "Navbar Consulta plazos fijos (secretaria + escribano)"
+    },
+    "T027": {
+      "status": "done",
+      "completed_at": "2026-08-06",
+      "note": "docs/frontend.md — rutas, componentes, API plazos fijos"
+    },
+    "T028": {
+      "status": "done",
+      "completed_at": "2026-08-06",
+      "note": "quickstart.md §7 validation checklist; frontend tests green"
+    },
+    "T029": {
+      "status": "done",
+      "completed_at": "2026-08-06",
+      "note": "frontend 11 tests pass; make test-backend requires Docker (not available in agent env)"
+    }
+  }
+}

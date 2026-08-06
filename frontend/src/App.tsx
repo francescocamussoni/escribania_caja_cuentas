@@ -3,7 +3,9 @@ import { Navigate, Outlet, Route, Routes } from "react-router-dom";
 import { Navbar } from "./components/layout/Navbar";
 import { useAuth } from "./hooks/useAuth";
 import ConsultaCajaPage from "./pages/ConsultaCajaPage";
+import ConsultaPlazosFijosPage from "./pages/ConsultaPlazosFijosPage";
 import LoginPage from "./pages/LoginPage";
+import PlazosFijosPage from "./pages/PlazosFijosPage";
 import RegistroCajaPage from "./pages/RegistroCajaPage";
 
 function HomePage() {
@@ -74,7 +76,16 @@ export default function App() {
             </SecretariaOnlyRoute>
           }
         />
+        <Route
+          path="/plazos-fijos"
+          element={
+            <SecretariaOnlyRoute>
+              <PlazosFijosPage />
+            </SecretariaOnlyRoute>
+          }
+        />
         <Route path="/consulta" element={<ConsultaCajaPage />} />
+        <Route path="/consulta-plazos-fijos" element={<ConsultaPlazosFijosPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

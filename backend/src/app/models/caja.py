@@ -8,6 +8,7 @@ from app.db.base import Base
 
 if TYPE_CHECKING:
     from app.models.movimiento import Movimiento
+    from app.models.plazo_fijo import PlazoFijo
 
 
 class Caja(Base):
@@ -23,5 +24,8 @@ class Caja(Base):
     )
 
     movimientos: Mapped[list["Movimiento"]] = relationship(
+        back_populates="caja",
+    )
+    plazos_fijos: Mapped[list["PlazoFijo"]] = relationship(
         back_populates="caja",
     )

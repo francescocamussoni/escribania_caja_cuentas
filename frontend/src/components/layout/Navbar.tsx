@@ -4,7 +4,13 @@ import { useAuth } from "../../hooks/useAuth";
 
 const links = [
   { to: "/registro", label: "Registro", roles: ["secretaria"] },
+  { to: "/plazos-fijos", label: "Plazos fijos", roles: ["secretaria"] },
   { to: "/consulta", label: "Consulta", roles: ["secretaria", "escribano"] },
+  {
+    to: "/consulta-plazos-fijos",
+    label: "Consulta plazos fijos",
+    roles: ["secretaria", "escribano"],
+  },
 ] as const;
 
 export function Navbar() {

@@ -112,6 +112,42 @@ export type UpdateMovimientoPayload = {
   tipo?: "entrada" | "salida";
 };
 
+export type PlazoFijo = {
+  id: number;
+  monto_ingresado: string;
+  monto_a_vencimiento: string;
+  fecha_vencimiento: string;
+  vencido: boolean;
+  created_at: string;
+  caja: Caja;
+};
+
+export type PlazosFijosResumen = {
+  caja: Caja;
+  total_monto_ingresado_activos: string;
+  total_monto_a_vencimiento_activos: string;
+};
+
+export type PaginatedPlazosFijos = {
+  items: PlazoFijo[];
+  page: number;
+  page_size: number;
+  total_items: number;
+  total_pages: number;
+};
+
+export type CreatePlazoFijoPayload = {
+  monto_ingresado: string;
+  monto_a_vencimiento: string;
+  fecha_vencimiento: string;
+};
+
+export type UpdatePlazoFijoPayload = {
+  monto_ingresado?: string;
+  monto_a_vencimiento?: string;
+  fecha_vencimiento?: string;
+};
+
 export async function fetchCajas(): Promise<Caja[]> {
   return apiGet<Caja[]>("/api/v1/cajas");
 }
@@ -152,4 +188,46 @@ export async function deleteMovimiento(
   movimientoId: number,
 ): Promise<void> {
   return apiDelete(`/api/v1/cajas/${cajaId}/movimientos/${movimientoId}`);
+}
+
+export async function fetchPlazosFijosResumen(
+  cajaId: number,
+): Promise<PlazosFijosResumen> {
+  return apiGet<PlazosFijosResumen>(
+    `/api/v1/cajas/${cajaId}/plazos-fijos/resumen`,
+  );
+}
+
+export async function fetchPlazosFijos(
+  cajaId: number,
+  page: number,
+): Promise<PaginatedPlazosFijos> {
+  return apiGet<PaginatedPlazosFijos>(
+    `/api/v1/cajas/${cajaId}/plazos-fijos?page=${page}`,
+  );
+}
+
+export async function createPlazoFijo(
+  cajaId: number,
+  payload: CreatePlazoFijoPayload,
+): Promise<PlazoFijo> {
+  return apiPost<PlazoFijo>(`/api/v1/cajas/${cajaId}/plazos-fijos`, payload);
+}
+
+export async function updatePlazoFijo(
+  cajaId: number,
+  plazoFijoId: number,
+  payload: UpdatePlazoFijoPayload,
+): Promise<PlazoFijo> {
+  return apiPatch<PlazoFijo>(
+    `/api/v1/cajas/${cajaId}/plazos-fijos/${plazoFijoId}`,
+    payload,
+  );
+}
+
+export async function deletePlazoFijo(
+  cajaId: number,
+  plazoFijoId: number,
+): Promise<void> {
+  return apiDelete(`/api/v1/cajas/${cajaId}/plazos-fijos/${plazoFijoId}`);
 }

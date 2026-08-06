@@ -5,7 +5,7 @@ from sqlalchemy import create_engine, pool
 
 from app.core.config import get_settings
 from app.db.base import Base
-from app.models import caja, movimiento, usuario  # noqa: F401
+from app.models import caja, movimiento, plazo_fijo, usuario  # noqa: F401
 
 config = context.config
 

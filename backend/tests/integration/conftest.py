@@ -6,6 +6,7 @@ from app.catalog.cajas import CAJAS_CATALOG
 from app.core.config import get_settings
 from app.core.security import hash_password
 from app.db.base import Base
+import app.models  # noqa: F401 — register models for create_all
 from app.models.caja import Caja
 from app.models.usuario import Usuario
 from app.seed import seed_cajas

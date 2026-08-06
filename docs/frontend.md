@@ -23,13 +23,18 @@ frontend/
 │   ├── pages/
 │   │   ├── LoginPage.tsx
 │   │   ├── RegistroCajaPage.tsx
-│   │   └── ConsultaCajaPage.tsx
+│   │   ├── ConsultaCajaPage.tsx
+│   │   ├── PlazosFijosPage.tsx
+│   │   └── ConsultaPlazosFijosPage.tsx
 │   ├── components/
 │   │   ├── layout/Navbar.tsx
 │   │   ├── CajaSelector.tsx
 │   │   ├── CajasAdicionalesSelector.tsx
 │   │   ├── MovimientoForm.tsx
 │   │   ├── MovimientoTable.tsx
+│   │   ├── PlazoFijoForm.tsx
+│   │   ├── PlazoFijoTable.tsx
+│   │   ├── PlazosFijosResumenPanel.tsx
 │   │   └── Pagination.tsx
 │   ├── hooks/
 │   │   └── useAuth.tsx    # JWT en sessionStorage
@@ -46,14 +51,23 @@ frontend/
 | `/login` | `LoginPage` | Público |
 | `/` | Redirige según rol | Autenticado |
 | `/registro` | `RegistroCajaPage` | Solo **secretaria** |
+| `/plazos-fijos` | `PlazosFijosPage` | Solo **secretaria** |
 | `/consulta` | `ConsultaCajaPage` | **secretaria** y **escribano** |
+| `/consulta-plazos-fijos` | `ConsultaPlazosFijosPage` | **secretaria** y **escribano** |
 
 Guards en `App.tsx`:
 
 - `ProtectedRoute` — requiere token JWT
-- `SecretariaOnlyRoute` — redirige escribanos a `/consulta`
+- `SecretariaOnlyRoute` — redirige escribanos a `/consulta` (aplica a `/registro` y `/plazos-fijos`)
 
-Navbar (`Navbar.tsx`) oculta el link "Registro" para escribanos.
+Navbar (`Navbar.tsx`) muestra links según rol:
+
+| Link | Roles |
+|------|-------|
+| Registro | secretaria |
+| Plazos fijos | secretaria |
+| Consulta | secretaria, escribano |
+| Consulta plazos fijos | secretaria, escribano |
 
 ## Autenticación en el cliente
 
@@ -71,6 +85,8 @@ El token se envía en `Authorization: Bearer ...` vía `api.ts`.
 
 - `fetchCajas`, `fetchCajaSaldo`, `fetchMovimientos`
 - `createMovimiento`, `updateMovimiento`, `deleteMovimiento`
+- `fetchPlazosFijosResumen`, `fetchPlazosFijos`
+- `createPlazoFijo`, `updatePlazoFijo`, `deletePlazoFijo`
 
 ### URL base según entorno
 
@@ -94,6 +110,18 @@ El token se envía en `Authorization: Bearer ...` vía `api.ts`.
 - Misma selección de cajas
 - Saldo actual e historial
 - Sin acciones de escritura para escribano
+
+### Plazos Fijos (secretaria)
+
+- Selector de caja (una caja por plazo; sin cajas adicionales)
+- Panel de resumen: dinero ingresado y dinero a cobrar al vencer (solo plazos activos)
+- Formulario: monto ingresado, fecha de vencimiento, monto a vencimiento
+- Tabla paginada (20 filas) con editar/eliminar sin límite de 24 h
+
+### Consulta Plazos Fijos (secretaria y escribano)
+
+- Selector de caja + botón **Consulta** (carga bajo demanda)
+- Mismo panel de resumen dual y tabla que gestión, sin formulario ni acciones de escritura
 
 Wireframes de referencia en la raíz del repo: `registro_de_caja.drawio`, `consulta_de_caja.drawio`.
 

@@ -1,0 +1,324 @@
+openapi: 3.0.3
+info:
+  title: Plazos Fijos por Caja — Escribanía API
+  version: 1.0.0
+  description: |
+    Extensión REST para gestión y consulta de plazos fijos por caja.
+    Requiere autenticación JWT (misma API base que Registro de Cajas).
+    Escritura solo rol `secretaria`.
+
+servers:
+  - url: http://localhost:8000
+    description: Desarrollo local
+
+tags:
+  - name: plazos-fijos
+
+paths:
+  /api/v1/cajas/{cajaId}/plazos-fijos/resumen:
+    get:
+      tags: [plazos-fijos]
+      summary: Totales de plazos activos (no vencidos) de una caja
+      operationId: getPlazosFijosResumen
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/CajaId'
+      responses:
+        '200':
+          description: Resumen de plazos con vencimiento futuro
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlazosFijosResumenResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/cajas/{cajaId}/plazos-fijos:
+    get:
+      tags: [plazos-fijos]
+      summary: Listar plazos fijos paginados (futuros primero, vencidos al final)
+      operationId: listPlazosFijos
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/CajaId'
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: page_size
+          in: query
+          schema:
+            type: integer
+            enum: [20]
+            default: 20
+      responses:
+        '200':
+          description: Página de plazos fijos
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedPlazosFijos'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    post:
+      tags: [plazos-fijos]
+      summary: Crear plazo fijo (solo Secretaria)
+      operationId: createPlazoFijo
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/CajaId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreatePlazoFijoRequest'
+      responses:
+        '201':
+          description: Plazo fijo creado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlazoFijo'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/cajas/{cajaId}/plazos-fijos/{plazoFijoId}:
+    patch:
+      tags: [plazos-fijos]
+      summary: Editar plazo fijo (solo Secretaria, sin ventana temporal)
+      operationId: updatePlazoFijo
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/CajaId'
+        - $ref: '#/components/parameters/PlazoFijoId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdatePlazoFijoRequest'
+      responses:
+        '200':
+          description: Plazo fijo actualizado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlazoFijo'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    delete:
+      tags: [plazos-fijos]
+      summary: Eliminar plazo fijo (solo Secretaria, sin ventana temporal)
+      operationId: deletePlazoFijo
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/CajaId'
+        - $ref: '#/components/parameters/PlazoFijoId'
+      responses:
+        '204':
+          description: Plazo fijo eliminado
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  parameters:
+    CajaId:
+      name: cajaId
+      in: path
+      required: true
+      schema:
+        type: integer
+        minimum: 1
+
+    PlazoFijoId:
+      name: plazoFijoId
+      in: path
+      required: true
+      schema:
+        type: integer
+        minimum: 1
+
+  schemas:
+    Caja:
+      type: object
+      required: [id, nombre, slug]
+      properties:
+        id:
+          type: integer
+        nombre:
+          type: string
+        slug:
+          type: string
+
+    PlazoFijo:
+      type: object
+      required:
+        - id
+        - monto_ingresado
+        - monto_a_vencimiento
+        - fecha_vencimiento
+        - vencido
+        - created_at
+        - caja
+      properties:
+        id:
+          type: integer
+        monto_ingresado:
+          type: string
+          description: Decimal ARS 2 decimales
+          example: "100000.00"
+        monto_a_vencimiento:
+          type: string
+          example: "105000.00"
+        fecha_vencimiento:
+          type: string
+          format: date
+          example: "2026-12-31"
+        vencido:
+          type: boolean
+          description: true si fecha_vencimiento < hoy (calendario Argentina)
+        created_at:
+          type: string
+          format: date-time
+        caja:
+          $ref: '#/components/schemas/Caja'
+
+    CreatePlazoFijoRequest:
+      type: object
+      required: [monto_ingresado, monto_a_vencimiento, fecha_vencimiento]
+      additionalProperties: false
+      properties:
+        monto_ingresado:
+          type: string
+          pattern: '^\d+(\.\d{1,2})?$'
+          example: "100000.00"
+        monto_a_vencimiento:
+          type: string
+          pattern: '^\d+(\.\d{1,2})?$'
+          example: "105000.00"
+        fecha_vencimiento:
+          type: string
+          format: date
+          example: "2026-12-31"
+
+    UpdatePlazoFijoRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        monto_ingresado:
+          type: string
+          pattern: '^\d+(\.\d{1,2})?$'
+        monto_a_vencimiento:
+          type: string
+          pattern: '^\d+(\.\d{1,2})?$'
+        fecha_vencimiento:
+          type: string
+          format: date
+      minProperties: 1
+
+    PlazosFijosResumenResponse:
+      type: object
+      required:
+        - caja
+        - total_monto_ingresado_activos
+        - total_monto_a_vencimiento_activos
+      properties:
+        caja:
+          $ref: '#/components/schemas/Caja'
+        total_monto_ingresado_activos:
+          type: string
+          description: Suma montos ingresados de plazos no vencidos
+          example: "250000.00"
+        total_monto_a_vencimiento_activos:
+          type: string
+          description: Suma montos a vencimiento de plazos no vencidos
+          example: "262500.00"
+
+    PaginatedPlazosFijos:
+      type: object
+      required: [items, page, page_size, total_items, total_pages]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/PlazoFijo'
+        page:
+          type: integer
+        page_size:
+          type: integer
+          enum: [20]
+        total_items:
+          type: integer
+        total_pages:
+          type: integer
+
+    ErrorResponse:
+      type: object
+      required: [detail]
+      properties:
+        detail:
+          type: string
+
+  responses:
+    BadRequest:
+      description: Validación fallida
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Unauthorized:
+      description: No autenticado o token expirado
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Forbidden:
+      description: Rol sin permiso
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    NotFound:
+      description: Recurso no encontrado
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
