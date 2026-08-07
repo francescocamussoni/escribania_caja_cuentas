@@ -4,6 +4,7 @@ import { Navbar } from "./components/layout/Navbar";
 import { useAuth } from "./hooks/useAuth";
 import ConsultaCajaPage from "./pages/ConsultaCajaPage";
 import ConsultaPlazosFijosPage from "./pages/ConsultaPlazosFijosPage";
+import ImpresionPage from "./pages/ImpresionPage";
 import LoginPage from "./pages/LoginPage";
 import PlazosFijosPage from "./pages/PlazosFijosPage";
 import RegistroCajaPage from "./pages/RegistroCajaPage";
@@ -86,6 +87,7 @@ export default function App() {
         />
         <Route path="/consulta" element={<ConsultaCajaPage />} />
         <Route path="/consulta-plazos-fijos" element={<ConsultaPlazosFijosPage />} />
+        <Route path="/impresion" element={<ImpresionPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

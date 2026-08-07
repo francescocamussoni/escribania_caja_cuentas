@@ -148,6 +148,57 @@ export type UpdatePlazoFijoPayload = {
   fecha_vencimiento?: string;
 };
 
+export type InformeTipo = "CAJA" | "PLAZO_FIJO";
+export type InformeModo = "MES_ANIO" | "PERIODO";
+
+export type InformePdfRequest = {
+  tipo: InformeTipo;
+  caja_id: number;
+  modo: InformeModo;
+  hasta_hoy?: boolean;
+  mes?: number;
+  anio?: number;
+  fecha_inicio?: string;
+  fecha_fin?: string;
+};
+
+export type InformePdfResult = {
+  blob: Blob;
+  filename: string;
+};
+
+export async function postInformePdf(
+  body: InformePdfRequest,
+): Promise<InformePdfResult> {
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+  };
+
+  if (authToken) {
+    headers.Authorization = `Bearer ${authToken}`;
+  }
+
+  const response = await fetch(`${API_BASE_URL}/api/v1/informes/pdf`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(body),
+  });
+
+  if (!response.ok) {
+    const message = await response.text();
+    throw new Error(
+      message || `API request failed with status ${response.status}`,
+    );
+  }
+
+  const blob = await response.blob();
+  const disposition = response.headers.get("Content-Disposition") ?? "";
+  const filenameMatch = disposition.match(/filename="([^"]+)"/);
+  const filename = filenameMatch?.[1] ?? "informe.pdf";
+
+  return { blob, filename };
+}
+
 export async function fetchCajas(): Promise<Caja[]> {
   return apiGet<Caja[]>("/api/v1/cajas");
 }

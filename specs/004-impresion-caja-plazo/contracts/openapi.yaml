@@ -1,0 +1,165 @@
+openapi: 3.0.3
+info:
+  title: Impresión de Caja y Plazos Fijos — Escribanía API
+  version: 1.0.0
+  description: |
+    Extensión REST para generación de informes PDF de caja y plazos fijos.
+    Requiere autenticación JWT. Roles permitidos: `secretaria`, `escribano`.
+    Solo lectura — no modifica movimientos ni plazos fijos.
+
+servers:
+  - url: http://localhost:8000
+    description: Desarrollo local
+
+tags:
+  - name: informes
+
+paths:
+  /api/v1/informes/pdf:
+    post:
+      tags: [informes]
+      summary: Generar informe PDF (Caja o Plazo fijo)
+      operationId: generateInformePdf
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InformePdfRequest'
+            examples:
+              cajaMesAnio:
+                summary: Informe de caja — marzo 2026
+                value:
+                  tipo: CAJA
+                  caja_id: 2
+                  modo: MES_ANIO
+                  mes: 3
+                  anio: 2026
+              cajaMesAnioHastaHoy:
+                summary: Informe de caja — desde abril 2026 hasta hoy
+                value:
+                  tipo: CAJA
+                  caja_id: 2
+                  modo: MES_ANIO
+                  mes: 4
+                  anio: 2026
+                  hasta_hoy: true
+              plazoFijoPeriodo:
+                summary: Informe plazos fijos — período específico
+                value:
+                  tipo: PLAZO_FIJO
+                  caja_id: 5
+                  modo: PERIODO
+                  fecha_inicio: "2026-01-15"
+                  fecha_fin: "2026-02-28"
+              periodoHastaHoy:
+                summary: Informe — desde fecha inicio hasta hoy
+                value:
+                  tipo: CAJA
+                  caja_id: 2
+                  modo: PERIODO
+                  fecha_inicio: "2026-04-01"
+                  hasta_hoy: true
+      responses:
+        '200':
+          description: PDF generado correctamente
+          headers:
+            Content-Disposition:
+              description: Nombre de archivo sugerido (attachment)
+              schema:
+                type: string
+                example: attachment; filename="CAJA-Ebel-2026-03.pdf"
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+        '400':
+          description: Parámetros inválidos (fechas, modo incompleto, fecha_inicio > fecha_fin)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          description: Caja no encontrada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    InformePdfRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - tipo
+        - caja_id
+        - modo
+      properties:
+        tipo:
+          type: string
+          enum: [CAJA, PLAZO_FIJO]
+          description: Tipo de informe a generar
+        caja_id:
+          type: integer
+          minimum: 1
+          description: ID de caja del catálogo (1–15)
+        modo:
+          type: string
+          enum: [MES_ANIO, PERIODO]
+          description: Modo de selección temporal
+        hasta_hoy:
+          type: boolean
+          default: false
+          description: |
+            Si true, el rango termina en hoy (calendario AR).
+            MES_ANIO: desde el 1er día del mes/año seleccionado hasta hoy.
+            PERIODO: desde fecha_inicio hasta hoy (fecha_fin ignorada).
+        mes:
+          type: integer
+          minimum: 1
+          maximum: 12
+          description: Obligatorio si modo=MES_ANIO
+        anio:
+          type: integer
+          minimum: 2000
+          maximum: 2100
+          description: Obligatorio si modo=MES_ANIO
+        fecha_inicio:
+          type: string
+          format: date
+          description: Obligatorio si modo=PERIODO (inclusive, calendario AR)
+        fecha_fin:
+          type: string
+          format: date
+          description: Obligatorio si modo=PERIODO y hasta_hoy=false (inclusive, calendario AR)
+
+    ErrorResponse:
+      type: object
+      additionalProperties: false
+      properties:
+        detail:
+          oneOf:
+            - type: string
+            - type: array
+              items:
+                type: object
+
+  responses:
+    Unauthorized:
+      description: No autenticado o token inválido
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'

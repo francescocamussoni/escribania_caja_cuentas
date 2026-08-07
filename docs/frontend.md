@@ -25,7 +25,8 @@ frontend/
 │   │   ├── RegistroCajaPage.tsx
 │   │   ├── ConsultaCajaPage.tsx
 │   │   ├── PlazosFijosPage.tsx
-│   │   └── ConsultaPlazosFijosPage.tsx
+│   │   ├── ConsultaPlazosFijosPage.tsx
+│   │   └── ImpresionPage.tsx
 │   ├── components/
 │   │   ├── layout/Navbar.tsx
 │   │   ├── CajaSelector.tsx
@@ -54,6 +55,7 @@ frontend/
 | `/plazos-fijos` | `PlazosFijosPage` | Solo **secretaria** |
 | `/consulta` | `ConsultaCajaPage` | **secretaria** y **escribano** |
 | `/consulta-plazos-fijos` | `ConsultaPlazosFijosPage` | **secretaria** y **escribano** |
+| `/impresion` | `ImpresionPage` | **secretaria** y **escribano** |
 
 Guards en `App.tsx`:
 
@@ -68,6 +70,7 @@ Navbar (`Navbar.tsx`) muestra links según rol:
 | Plazos fijos | secretaria |
 | Consulta | secretaria, escribano |
 | Consulta plazos fijos | secretaria, escribano |
+| Impresión | secretaria, escribano |
 
 ## Autenticación en el cliente
 
@@ -87,6 +90,7 @@ El token se envía en `Authorization: Bearer ...` vía `api.ts`.
 - `createMovimiento`, `updateMovimiento`, `deleteMovimiento`
 - `fetchPlazosFijosResumen`, `fetchPlazosFijos`
 - `createPlazoFijo`, `updatePlazoFijo`, `deletePlazoFijo`
+- `postInformePdf` — genera y descarga PDF de informes (caja o plazo fijo)
 
 ### URL base según entorno
 
@@ -122,6 +126,14 @@ El token se envía en `Authorization: Bearer ...` vía `api.ts`.
 
 - Selector de caja + botón **Consulta** (carga bajo demanda)
 - Mismo panel de resumen dual y tabla que gestión, sin formulario ni acciones de escritura
+
+### Impresión (secretaria y escribano)
+
+- Paridad visual con Consulta de Caja (`consulta_de_caja.drawio`)
+- Tipo de informe: **Caja** o **Plazo fijo**
+- Selector de caja, temporalidad (**Mes y año** | **Período específico**) y checkbox **Hasta hoy**
+- Botón **Generar informe** descarga PDF vía `postInformePdf` (nombre desde `Content-Disposition`)
+- Mismos roles que consulta; sin capacidades de escritura adicionales para escribano
 
 Wireframes de referencia en la raíz del repo: `registro_de_caja.drawio`, `consulta_de_caja.drawio`.
 

@@ -466,6 +466,38 @@ select {
   min-width: 200px;
 }
 
+.impresion-form {
+  flex-direction: column;
+  align-items: stretch;
+  max-width: 36rem;
+}
+
+.impresion-fieldset {
+  border: none;
+  padding: 0;
+  margin: 0;
+}
+
+.impresion-date-row {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.impresion-date-row label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.impresion-radio,
+.impresion-checkbox {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin-right: 1rem;
+}
+
 .movimiento-edit-panel {
   margin: 1.5rem 0;
   padding: 1.25rem;
