@@ -26,7 +26,8 @@ frontend/
 │   │   ├── ConsultaCajaPage.tsx
 │   │   ├── PlazosFijosPage.tsx
 │   │   ├── ConsultaPlazosFijosPage.tsx
-│   │   └── ImpresionPage.tsx
+│   │   ├── ImpresionPage.tsx
+│   │   └── ConfiguracionCajasPage.tsx
 │   ├── components/
 │   │   ├── layout/Navbar.tsx
 │   │   ├── CajaSelector.tsx
@@ -57,13 +58,14 @@ frontend/
 | `/consulta` | `ConsultaCajaPage` | **secretaria** y **escribano** |
 | `/consulta-plazos-fijos` | `ConsultaPlazosFijosPage` | **secretaria** y **escribano** |
 | `/impresion` | `ImpresionPage` | **secretaria** y **escribano** |
+| `/configuracion` | `ConfiguracionCajasPage` | Solo **secretaria** |
 
 Guards en `App.tsx`:
 
 - `ProtectedRoute` — requiere token JWT
-- `SecretariaOnlyRoute` — redirige escribanos a `/consulta` (aplica a `/registro` y `/plazos-fijos`)
+- `SecretariaOnlyRoute` — redirige escribanos a `/consulta` (aplica a `/registro`, `/plazos-fijos` y `/configuracion`)
 
-Navbar (`Navbar.tsx`) muestra links según rol y, a la derecha, el **nombre de usuario** (abre el panel de cambio de clave) y **Salir**:
+Navbar (`Navbar.tsx`) muestra links operativos según rol. A la derecha, en este orden: **nombre de usuario** (abre el panel de cambio de clave), **Configuración** (solo secretaria) y **Salir**.
 
 | Link | Roles |
 |------|-------|
@@ -72,6 +74,7 @@ Navbar (`Navbar.tsx`) muestra links según rol y, a la derecha, el **nombre de u
 | Consulta | secretaria, escribano |
 | Consulta plazos fijos | secretaria, escribano |
 | Impresión | secretaria, escribano |
+| Configuración (junto a Salir) | secretaria |
 
 ## Autenticación en el cliente
 
@@ -91,7 +94,9 @@ Tras un cambio de clave **autenticado** (`changePassword` → `POST /api/v1/auth
 
 - `postChangePasswordPublic` — `POST /api/v1/auth/change-password` (login, sin JWT)
 - `postChangePasswordMe` — `POST /api/v1/auth/me/password` (sesión activa)
-- `fetchCajas`, `fetchCajaSaldo`, `fetchMovimientos`
+- `fetchCajas` / `getCajas` — `GET /cajas` (solo activas)
+- `listCajasConfig`, `createCaja`, `archiveCaja`, `unarchiveCaja` — configuración (secretaria)
+- `fetchCajaSaldo`, `fetchSaldoGeneral`, `fetchMovimientos`
 - `createMovimiento`, `updateMovimiento`, `deleteMovimiento`
 - `fetchPlazosFijosResumen`, `fetchPlazosFijos`
 - `createPlazoFijo`, `updatePlazoFijo`, `deletePlazoFijo`
@@ -123,6 +128,7 @@ Tras un cambio de clave **autenticado** (`changePassword` → `POST /api/v1/auth
 ### Consulta de Caja (secretaria y escribano)
 
 - Desplegable de **una** caja + botón **Consulta** (igual que el wireframe `consulta_de_caja.drawio`)
+- **secretaria**: botón **Subtotal general** (junto a Consulta) llama `GET /cajas/saldo-general`, muestra la suma y debajo un resumen (nombre + subtotal) de cada caja **activa**. Escribano no ve el botón; el backend responde **403**. Consulta de caja(s) y subtotal general son mutuamente excluyentes en pantalla.
 - Debajo: sección **Ver en conjunto con otras cajas** (`CajasAdicionalesSelector` con `summary` distinto; Registro sigue diciendo «Registrar también en otras cajas»)
 - **Sin casillas**: valor de caja + historial paginado (20), mismas llamadas `GET .../saldo` y `GET .../movimientos`
 - **Con casillas**: `Promise.all` de saldos (principal + marcadas). Si **cualquiera** falla, se descarta el intento (error, sin paneles). Arriba de las solapas se muestra **Valor en conjunto** (suma de los `saldo_actual` de ese intento). Solapas `CajaConsultaSolapa` **cerradas**; primera = caja del desplegable; resto en orden de catálogo. Historial lazy al expandir; paginación independiente
@@ -148,7 +154,14 @@ Tras un cambio de clave **autenticado** (`changePassword` → `POST /api/v1/auth
 - Botón **Generar informe** descarga PDF vía `postInformePdf` (nombre desde `Content-Disposition`)
 - Mismos roles que consulta; sin capacidades de escritura adicionales para escribano
 
+### Configuración de cajas (secretaria)
+
+- Alta por nombre (1–120 caracteres); **Agregar** en la misma línea que el campo, a la derecha
+- Archivo y desarchivo de cajas; listado de activas y archivadas; las archivadas no aparecen en selectores operativos
+- Escribano no ve el link **Configuración**; acceso directo a `/configuracion` redirige a `/consulta`
+
 Wireframes de referencia en la raíz del repo: `registro_de_caja.drawio`, `consulta_de_caja.drawio`.
+La solapa Configuración sigue el wireframe descrito en `specs/006-config-archivo-cajas/spec.md`.
 
 ## Desarrollo local
 

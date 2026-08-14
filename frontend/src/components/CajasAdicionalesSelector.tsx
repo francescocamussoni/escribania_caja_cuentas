@@ -1,3 +1,5 @@
+import type { Ref } from "react";
+
 import type { Caja } from "../services/api";
 
 type CajasAdicionalesSelectorProps = {
@@ -7,6 +9,7 @@ type CajasAdicionalesSelectorProps = {
   onChange: (selectedCajaIds: number[]) => void;
   disabled?: boolean;
   summary?: string;
+  detailsRef?: Ref<HTMLDetailsElement>;
 };
 
 export default function CajasAdicionalesSelector({
@@ -16,6 +19,7 @@ export default function CajasAdicionalesSelector({
   onChange,
   disabled = false,
   summary = "Registrar también en otras cajas",
+  detailsRef,
 }: CajasAdicionalesSelectorProps) {
   const otherCajas = cajas.filter((caja) => caja.id !== activeCajaId);
 
@@ -32,7 +36,7 @@ export default function CajasAdicionalesSelector({
   }
 
   return (
-    <details className="cajas-adicionales">
+    <details ref={detailsRef} className="cajas-adicionales">
       <summary className="cajas-adicionales__summary">
         {summary}
         {selectedCajaIds.length > 0 ? (

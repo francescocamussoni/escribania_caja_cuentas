@@ -1,14 +1,16 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import CajaConsultaSolapa from "../components/CajaConsultaSolapa";
 import CajaSelector from "../components/CajaSelector";
 import CajasAdicionalesSelector from "../components/CajasAdicionalesSelector";
 import MovimientoTable from "../components/MovimientoTable";
 import Pagination from "../components/Pagination";
+import { useAuth } from "../hooks/useAuth";
 import {
   apiGet,
   type Caja,
   type CajaSaldo,
+  type CajaSaldoGeneral,
   type Movimiento,
   type PaginatedMovimientos,
 } from "../services/api";
@@ -40,6 +42,8 @@ function sumSaldoActual(saldos: CajaSaldo[]): string {
 }
 
 export default function ConsultaCajaPage() {
+  const { rol } = useAuth();
+  const isSecretaria = rol === "secretaria";
   const [cajas, setCajas] = useState<Caja[]>([]);
   const [selectedCajaId, setSelectedCajaId] = useState<number | null>(null);
   const [adicionalesIds, setAdicionalesIds] = useState<number[]>([]);
@@ -54,6 +58,8 @@ export default function ConsultaCajaPage() {
   const [loadingConsulta, setLoadingConsulta] = useState(false);
   const [hasConsulted, setHasConsulted] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [saldoGeneral, setSaldoGeneral] = useState<CajaSaldoGeneral | null>(null);
+  const adicionalesDetailsRef = useRef<HTMLDetailsElement>(null);
 
   const loadCajaData = useCallback(async (cajaId: number, currentPage: number) => {
     const [saldoResponse, movimientosResponse] = await Promise.all([
@@ -113,6 +119,7 @@ export default function ConsultaCajaPage() {
     setSaldosConjunto([]);
     setJointMode(false);
     setHasConsulted(false);
+    setSaldoGeneral(null);
   }
 
   async function handleConsulta() {
@@ -123,6 +130,9 @@ export default function ConsultaCajaPage() {
     setLoadingConsulta(true);
     setError(null);
     clearConsultaResult();
+    if (adicionalesDetailsRef.current) {
+      adicionalesDetailsRef.current.open = false;
+    }
 
     try {
       if (adicionalesIds.length === 0) {
@@ -168,6 +178,24 @@ export default function ConsultaCajaPage() {
     }
   }
 
+  async function handleSaldoGeneral() {
+    setLoadingConsulta(true);
+    setError(null);
+    clearConsultaResult();
+    if (adicionalesDetailsRef.current) {
+      adicionalesDetailsRef.current.open = false;
+    }
+    try {
+      const response = await apiGet<CajaSaldoGeneral>("/api/v1/cajas/saldo-general");
+      setSaldoGeneral(response);
+    } catch {
+      setSaldoGeneral(null);
+      setError("No se pudo cargar el subtotal general.");
+    } finally {
+      setLoadingConsulta(false);
+    }
+  }
+
   const isBusy = loadingCajas || loadingConsulta;
 
   return (
@@ -194,6 +222,16 @@ export default function ConsultaCajaPage() {
           >
             Consulta
           </button>
+          {isSecretaria ? (
+            <button
+              type="button"
+              className="button button--secondary"
+              disabled={isBusy}
+              onClick={() => void handleSaldoGeneral()}
+            >
+              Subtotal general
+            </button>
+          ) : null}
         </div>
         <CajasAdicionalesSelector
           cajas={cajas}
@@ -202,8 +240,34 @@ export default function ConsultaCajaPage() {
           onChange={setAdicionalesIds}
           disabled={isBusy}
           summary="Ver en conjunto con otras cajas"
+          detailsRef={adicionalesDetailsRef}
         />
       </div>
+
+      {saldoGeneral ? (
+        <section className="consulta-conjunto" aria-live="polite">
+          <section className="saldo-panel">
+            <h2>Subtotal general</h2>
+            <p className="saldo-valor">$ {saldoGeneral.subtotal_general}</p>
+          </section>
+          <table className="movimiento-table">
+            <thead>
+              <tr>
+                <th>Caja</th>
+                <th>Subtotal</th>
+              </tr>
+            </thead>
+            <tbody>
+              {saldoGeneral.cajas.map((item) => (
+                <tr key={item.caja.id}>
+                  <td>{item.caja.nombre}</td>
+                  <td>$ {item.saldo_actual}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </section>
+      ) : null}
 
       {hasConsulted && jointMode ? (
         <section className="consulta-conjunto" aria-live="polite">

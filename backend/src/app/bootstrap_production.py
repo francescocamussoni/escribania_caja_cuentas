@@ -1,4 +1,7 @@
-"""Production bootstrap: catalog cajas + admin user from secure env/secrets.
+"""Production bootstrap: initial catalog cajas + admin user from secure env/secrets.
+
+Inserts the 15 seed cajas if missing by slug. Does not freeze the live list;
+secretaria altas after bootstrap do not require editing CAJAS_CATALOG.
 
 Does NOT seed development users (escribano) or sample movimientos.
 """

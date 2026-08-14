@@ -1,3 +1,10 @@
+"""Initial caja seed only — not a closed operational list.
+
+`seed_cajas` / `bootstrap_production` insert these 15 rows as `activa` if missing.
+Later altas go through `caja_service.create_caja` (secretaria); do not add names here.
+Archived cajas remain in the database and are excluded from operational selectors.
+"""
+
 CAJAS_CATALOG: list[dict[str, str]] = [
     {"nombre": "Bambina", "slug": "bambina"},
     {"nombre": "Ebel", "slug": "ebel"},

@@ -151,6 +151,16 @@ export function Navbar() {
             ) : null}
           </div>
         ) : null}
+        {rol === "secretaria" ? (
+          <NavLink
+            to="/configuracion"
+            className={({ isActive }) =>
+              isActive ? "navbar__link navbar__link--active" : "navbar__link"
+            }
+          >
+            Configuración
+          </NavLink>
+        ) : null}
         <button type="button" className="navbar__logout" onClick={handleLogout}>
           Salir
         </button>

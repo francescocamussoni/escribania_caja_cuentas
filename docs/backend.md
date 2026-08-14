@@ -30,10 +30,10 @@ backend/
 │   │       ├── auth.py
 │   │       ├── cajas.py
 │   │       └── movimientos.py
-│   ├── catalog/cajas.py     # 15 cajas predefinidas
+│   ├── catalog/cajas.py     # Seed inicial de 15 cajas (no es lista cerrada)
 │   ├── core/                # config, security, logging
 │   ├── db/                  # session, base
-│   ├── models/              # Usuario, Caja, Movimiento
+│   ├── models/              # Usuario, Caja, Movimiento, EventoConfiguracionCaja
 │   ├── schemas/             # Pydantic request/response
 │   └── services/            # Lógica de negocio (subtotales, auth)
 └── tests/
@@ -68,10 +68,25 @@ Contrato: `specs/005-cambio-clave-consulta-conjunto/contracts/openapi.yaml`.
 
 ### Cajas
 
+Listado **operativo** (`GET /cajas`, `GET /cajas/operativas`): solo cajas `activa`.
+Listado de **configuración** (`GET /cajas/config`): activas y archivadas (secretaria).
+
 | Método | Ruta | Auth | Descripción |
 |--------|------|------|-------------|
-| `GET` | `/api/v1/cajas` | JWT | Lista las 15 cajas |
-| `GET` | `/api/v1/cajas/{id}/saldo` | JWT | Saldo actual y último movimiento |
+| `GET` | `/api/v1/cajas` | JWT | Cajas **activas** (selectores de registro, consulta, plazos, impresión) |
+| `GET` | `/api/v1/cajas/operativas` | JWT | Igual que `GET /cajas` (alias explícito) |
+| `GET` | `/api/v1/cajas/config` | JWT **secretaria** | Activas + archivadas para la solapa Configuración |
+| `POST` | `/api/v1/cajas/config` | JWT **secretaria** | Alta de caja (`nombre` 1–120). **201**. Duplicado (case/espacios) → **400** |
+| `POST` | `/api/v1/cajas/{id}/archive` | JWT **secretaria** | Archiva (idempotente). **200**. Desconocida → **404** |
+| `POST` | `/api/v1/cajas/{id}/unarchive` | JWT **secretaria** | Desarchiva (vuelve `activa`, idempotente). **200**. Desconocida → **404** |
+| `GET` | `/api/v1/cajas/saldo-general` | JWT **secretaria** | Suma + detalle de saldos de **todas las cajas activas** |
+| `GET` | `/api/v1/cajas/{id}/saldo` | JWT | Saldo e historial de una caja (activa o archivada) |
+
+Cuerpo de alta: `{ "nombre": "..." }` (`extra` fields → **422**). Respuesta de caja incluye `estado` (`activa` \| `archivada`). Archivar y desarchivar son operaciones de secretaria.
+
+Escribano en `POST /cajas/config`, `POST .../archive`, `POST .../unarchive` o `GET /cajas/saldo-general` → **403**. Sin JWT → **401**.
+
+Contrato: `specs/006-config-archivo-cajas/contracts/openapi.yaml`.
 
 ### Movimientos
 
@@ -100,8 +115,14 @@ En producción, CloudFront expone `/api/health` reescrito a `/health` en el orig
 
 ### `caja`
 
-- Catálogo fijo de 15 cajas (`catalog/cajas.py`)
-- Creadas por bootstrap/seed de forma idempotente
+- Seed inicial de 15 cajas (`catalog/cajas.py`); altas posteriores vía API, sin editar el catálogo
+- `estado` (`activa` \| `archivada`), `archived_at`, `archived_by_user_id`, `updated_at`
+- Bootstrap/seed inserta las 15 iniciales de forma idempotente si faltan por slug
+- Archivo es baja lógica: historial y saldo siguen consultables por `id`
+
+### `evento_configuracion_caja`
+
+- Auditoría de alta/archivo/desarchivo (`caja_created`, `caja_archived`, `caja_unarchived`) con `actor_user_id`
 
 ### `movimiento`
 
@@ -128,7 +149,7 @@ Referencia completa: `.env.example`.
 `entrypoint.sh` ejecuta en cada inicio:
 
 1. `alembic upgrade head` — aplica migraciones pendientes
-2. `python -m app.bootstrap_production` — 15 cajas + admin si no existen
+2. `python -m app.bootstrap_production` — 15 cajas iniciales + admin si no existen
 3. `uvicorn app.main:app` — servidor HTTP
 
 En **desarrollo local**, después del primer arranque conviene `make seed` para cargar
@@ -164,9 +185,10 @@ make test-backend
 docker compose exec backend pytest -v
 ```
 
-Cobertura principal: auth (login, cambio de clave, corte de JWT), RBAC, movimientos, bootstrap de producción.
+Cobertura principal: auth (login, cambio de clave, corte de JWT), RBAC, movimientos, configuración de cajas (alta/archivo), bootstrap de producción.
 
 ## Contrato OpenAPI
 
 Especificación histórica: `specs/001-registro-cajas/contracts/openapi.yaml`.  
-Cambio de contraseña: `specs/005-cambio-clave-consulta-conjunto/contracts/openapi.yaml`.
+Cambio de contraseña: `specs/005-cambio-clave-consulta-conjunto/contracts/openapi.yaml`.  
+Configuración de cajas: `specs/006-config-archivo-cajas/contracts/openapi.yaml`.

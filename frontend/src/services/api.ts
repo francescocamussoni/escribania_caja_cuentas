@@ -98,12 +98,24 @@ export type Caja = {
   id: number;
   nombre: string;
   slug: string;
+  estado?: "activa" | "archivada";
 };
 
 export type CajaSaldo = {
   caja: Caja;
   saldo_actual: string;
   ultimo_movimiento_at: string | null;
+};
+
+export type CajaSaldoGeneralItem = {
+  caja: Caja;
+  saldo_actual: string;
+};
+
+export type CajaSaldoGeneral = {
+  subtotal_general: string;
+  cajas_incluidas: number;
+  cajas: CajaSaldoGeneralItem[];
 };
 
 export type Movimiento = {
@@ -228,8 +240,32 @@ export async function fetchCajas(): Promise<Caja[]> {
   return apiGet<Caja[]>("/api/v1/cajas");
 }
 
+export async function getCajas(): Promise<Caja[]> {
+  return fetchCajas();
+}
+
+export async function listCajasConfig(): Promise<Caja[]> {
+  return apiGet<Caja[]>("/api/v1/cajas/config");
+}
+
+export async function createCaja(nombre: string): Promise<Caja> {
+  return apiPost<Caja>("/api/v1/cajas/config", { nombre });
+}
+
+export async function archiveCaja(cajaId: number): Promise<Caja> {
+  return apiPost<Caja>(`/api/v1/cajas/${cajaId}/archive`, {});
+}
+
+export async function unarchiveCaja(cajaId: number): Promise<Caja> {
+  return apiPost<Caja>(`/api/v1/cajas/${cajaId}/unarchive`, {});
+}
+
 export async function fetchCajaSaldo(cajaId: number): Promise<CajaSaldo> {
   return apiGet<CajaSaldo>(`/api/v1/cajas/${cajaId}/saldo`);
+}
+
+export async function fetchSaldoGeneral(): Promise<CajaSaldoGeneral> {
+  return apiGet<CajaSaldoGeneral>("/api/v1/cajas/saldo-general");
 }
 
 export async function fetchMovimientos(

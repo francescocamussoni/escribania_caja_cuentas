@@ -45,6 +45,12 @@ def seed_escribano_user(db: Session) -> None:
 
 
 def seed_cajas(db: Session) -> None:
+    """Insert the 15 initial activas from CAJAS_CATALOG if those slugs are missing.
+
+    Does not replace or constrain the live list: secretaria altas persist via
+    the API without editing this catalog. Existing rows are left unchanged
+    (including archivadas).
+    """
     for item in CAJAS_CATALOG:
         existing = db.scalar(select(Caja).where(Caja.slug == item["slug"]))
         if existing is not None:

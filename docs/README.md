@@ -1,7 +1,8 @@
 # Registro de Cajas — Escribanía
 
 Documentación del proyecto. La aplicación permite registrar y consultar movimientos de
-dinero en 15 cajas/cuentas de una escribanía, con control de acceso por rol.
+dinero en cajas/cuentas de una escribanía (seed inicial de 15; altas y archivo por
+secretaria), con control de acceso por rol.
 
 ## Índice
 
@@ -44,6 +45,7 @@ make seed
 | `/login` | Todos | Inicio de sesión |
 | `/registro` | Secretaria | Alta, edición y baja de movimientos |
 | `/consulta` | Secretaria, Escribano | Saldo e historial (solo lectura para escribano) |
+| `/configuracion` | Secretaria | Alta y archivo de cajas |
 
 ## Producción (AWS)
 
@@ -62,6 +64,7 @@ Documentación de diseño en `specs/`:
 
 - `specs/001-registro-cajas/` — funcionalidad de negocio
 - `specs/002-aws-deploy/` — infraestructura y despliegue
+- `specs/006-config-archivo-cajas/` — alta y archivo de cajas
 
 ## Estructura del repositorio
 

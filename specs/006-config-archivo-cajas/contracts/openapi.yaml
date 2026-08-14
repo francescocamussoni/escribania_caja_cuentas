@@ -1,0 +1,210 @@
+openapi: 3.0.3
+info:
+  title: Caja Configuration API
+  version: 0.1.0
+  description: >
+    Contratos para alta, archivo, desarchivo y listados de cajas.
+    Montaje real: FastAPI `app.include_router(api_router, prefix="/api/v1")`
+    y `api_router.include_router(cajas.router, prefix="/cajas")`.
+servers:
+  - url: /api/v1
+paths:
+  /cajas:
+    get:
+      summary: Listar cajas para selección operativa (solo activas)
+      tags: [cajas]
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Listado de cajas activas
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/CajaResponse"
+        "401":
+          description: No autenticado
+  /cajas/config:
+    get:
+      summary: Listar cajas activas y archivadas para la solapa de configuración
+      tags: [cajas]
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Listado de configuración (activas y archivadas)
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/CajaResponse"
+        "401":
+          description: No autenticado
+        "403":
+          description: Rol no autorizado (solo secretaria)
+    post:
+      summary: Crear nueva caja operativa
+      tags: [cajas]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CajaCreateRequest"
+      responses:
+        "201":
+          description: Caja creada como activa
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CajaResponse"
+        "400":
+          description: Datos inválidos o duplicado de caja
+        "401":
+          description: No autenticado
+        "403":
+          description: Rol no autorizado (solo secretaria)
+        "422":
+          description: Validación de esquema (nombre vacío, extra fields)
+  /cajas/operativas:
+    get:
+      summary: Listar cajas activas para selección operativa
+      tags: [cajas]
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Listado de cajas activas
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/CajaResponse"
+        "401":
+          description: No autenticado
+  /cajas/saldo-general:
+    get:
+      summary: Subtotal general de todas las cajas activas
+      tags: [cajas]
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Suma de saldos actuales y detalle por caja activa
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [subtotal_general, cajas_incluidas, cajas]
+                properties:
+                  subtotal_general:
+                    type: string
+                    example: "1500.00"
+                  cajas_incluidas:
+                    type: integer
+                    minimum: 0
+                  cajas:
+                    type: array
+                    items:
+                      type: object
+                      additionalProperties: false
+                      required: [caja, saldo_actual]
+                      properties:
+                        caja:
+                          $ref: "#/components/schemas/CajaResponse"
+                        saldo_actual:
+                          type: string
+                          example: "250.00"
+        "401":
+          description: No autenticado
+        "403":
+          description: Rol no autorizado (solo secretaria)
+  /cajas/{cajaId}/archive:
+    post:
+      summary: Archivar caja activa
+      tags: [cajas]
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: cajaId
+          required: true
+          schema:
+            type: integer
+            minimum: 1
+      responses:
+        "200":
+          description: Caja archivada o ya archivada (idempotente)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CajaResponse"
+        "401":
+          description: No autenticado
+        "403":
+          description: Rol no autorizado (solo secretaria)
+        "404":
+          description: Caja inexistente
+  /cajas/{cajaId}/unarchive:
+    post:
+      summary: Desarchivar caja (vuelve a activa)
+      tags: [cajas]
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: cajaId
+          required: true
+          schema:
+            type: integer
+            minimum: 1
+      responses:
+        "200":
+          description: Caja activa o ya activa (idempotente)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CajaResponse"
+        "401":
+          description: No autenticado
+        "403":
+          description: Rol no autorizado (solo secretaria)
+        "404":
+          description: Caja inexistente
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    CajaCreateRequest:
+      type: object
+      additionalProperties: false
+      required: [nombre]
+      properties:
+        nombre:
+          type: string
+          minLength: 1
+          maxLength: 120
+    CajaResponse:
+      type: object
+      additionalProperties: false
+      required: [id, nombre, slug, estado]
+      properties:
+        id:
+          type: integer
+        nombre:
+          type: string
+        slug:
+          type: string
+        estado:
+          type: string
+          enum: [activa, archivada]

@@ -294,4 +294,18 @@ describe("PlazosFijosPage", () => {
       expect(screen.getByText("5000.00")).toBeInTheDocument();
     });
   });
+
+  it("does not list archived cajas in the selector", async () => {
+    render(
+      <MemoryRouter>
+        <PlazosFijosPage />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("Bambina")).toBeInTheDocument();
+    });
+    expect(screen.queryByText("Caja Archivada")).not.toBeInTheDocument();
+    expect(screen.getByText("Ebel")).toBeInTheDocument();
+  });
 });

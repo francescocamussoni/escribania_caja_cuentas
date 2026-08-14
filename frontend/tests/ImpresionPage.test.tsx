@@ -204,4 +204,17 @@ describe("ImpresionPage", () => {
       );
     });
   });
+
+  it("does not list archived cajas in the selector", async () => {
+    render(
+      <MemoryRouter>
+        <ImpresionPage />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("Ebel")).toBeInTheDocument();
+    });
+    expect(screen.queryByText("Caja Archivada")).not.toBeInTheDocument();
+  });
 });

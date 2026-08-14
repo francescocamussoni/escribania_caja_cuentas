@@ -96,4 +96,17 @@ describe("ConsultaPlazosFijosPage", () => {
     expect(screen.getByText("25000.00")).toBeInTheDocument();
     expect(screen.getByText("27500.00")).toBeInTheDocument();
   });
+
+  it("does not list archived cajas in the selector", async () => {
+    render(
+      <MemoryRouter>
+        <ConsultaPlazosFijosPage />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("Bambina")).toBeInTheDocument();
+    });
+    expect(screen.queryByText("Caja Archivada")).not.toBeInTheDocument();
+  });
 });

@@ -56,18 +56,21 @@ vi.mock("../src/services/api", () => ({
   setAuthToken: vi.fn(),
 }));
 
+const authState = {
+  token: "test-token",
+  rol: "escribano",
+  isAuthenticated: true,
+  login: vi.fn(),
+  logout: vi.fn(),
+};
+
 vi.mock("../src/hooks/useAuth", () => ({
-  useAuth: () => ({
-    token: "test-token",
-    rol: "escribano",
-    isAuthenticated: true,
-    login: vi.fn(),
-    logout: vi.fn(),
-  }),
+  useAuth: () => authState,
 }));
 
 describe("ConsultaCajaPage", () => {
   beforeEach(() => {
+    authState.rol = "escribano";
     apiGet.mockReset();
     apiGet.mockImplementation((path: string) => {
       if (path === "/api/v1/cajas") {
@@ -117,7 +120,10 @@ describe("ConsultaCajaPage", () => {
     expect(
       screen.queryByRole("button", { name: /salida/i }),
     ).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /consulta/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^consulta$/i })).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /subtotal general/i }),
+    ).not.toBeInTheDocument();
     expect(
       screen.getByText("Ver en conjunto con otras cajas"),
     ).toBeInTheDocument();
@@ -212,6 +218,7 @@ describe("ConsultaCajaPage", () => {
 
     expect(screen.getByRole("heading", { name: /valor en conjunto/i })).toBeInTheDocument();
     expect(screen.getByText("$ 345.00")).toBeInTheDocument();
+    expect(document.querySelector(".cajas-adicionales")).not.toHaveAttribute("open");
 
     const solapas = document.querySelectorAll(".caja-consulta-solapa");
     expect(solapas).toHaveLength(3);
@@ -316,5 +323,145 @@ describe("ConsultaCajaPage", () => {
     expect(screen.queryByRole("checkbox", { name: /martin/i })).not.toBeInTheDocument();
     expect(screen.getByRole("checkbox", { name: /bambina/i })).toBeInTheDocument();
     expect(screen.getByRole("checkbox", { name: /bambina/i })).not.toBeChecked();
+  });
+
+  it("does not list archived cajas in the dropdown or additional boxes", async () => {
+    await renderConsulta();
+    fireEvent.click(screen.getByText("Ver en conjunto con otras cajas"));
+
+    expect(screen.queryByText("Caja Archivada")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("checkbox", { name: /caja archivada/i }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole("checkbox", { name: /martin/i })).toBeInTheDocument();
+  });
+
+  it("hides Subtotal general from escribano and shows it for secretaria", async () => {
+    const { rerender } = render(
+      <MemoryRouter>
+        <ConsultaCajaPage />
+      </MemoryRouter>,
+    );
+    await waitFor(() => {
+      expect(screen.getByText("Bambina")).toBeInTheDocument();
+    });
+    expect(
+      screen.queryByRole("button", { name: /subtotal general/i }),
+    ).not.toBeInTheDocument();
+
+    authState.rol = "secretaria";
+    rerender(
+      <MemoryRouter>
+        <ConsultaCajaPage />
+      </MemoryRouter>,
+    );
+    await waitFor(() => {
+      expect(
+        screen.getByRole("button", { name: /subtotal general/i }),
+      ).toBeInTheDocument();
+    });
+  });
+
+  it("loads subtotal general for secretaria without requiring a caja consulta", async () => {
+    authState.rol = "secretaria";
+    apiGet.mockImplementation((path: string) => {
+      if (path === "/api/v1/cajas") {
+        return Promise.resolve([...CAJAS]);
+      }
+      if (path === "/api/v1/cajas/saldo-general") {
+        return Promise.resolve({
+          subtotal_general: "1234.50",
+          cajas_incluidas: 3,
+          cajas: [
+            { caja: CAJAS[0], saldo_actual: "250.00" },
+            { caja: CAJAS[1], saldo_actual: "80.00" },
+            { caja: CAJAS[2], saldo_actual: "904.50" },
+          ],
+        });
+      }
+      return Promise.reject(new Error(`Unexpected path: ${path}`));
+    });
+
+    render(
+      <MemoryRouter>
+        <ConsultaCajaPage />
+      </MemoryRouter>,
+    );
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /subtotal general/i })).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /subtotal general/i }));
+
+    await waitFor(() => {
+      expect(apiGet).toHaveBeenCalledWith("/api/v1/cajas/saldo-general");
+    });
+    expect(screen.getByRole("heading", { name: /subtotal general/i })).toBeInTheDocument();
+    expect(screen.getByText("$ 1234.50")).toBeInTheDocument();
+    const resumen = screen.getByRole("table");
+    expect(resumen).toHaveTextContent("Bambina");
+    expect(resumen).toHaveTextContent("$ 250.00");
+    expect(resumen).toHaveTextContent("Martin");
+    expect(resumen).toHaveTextContent("$ 80.00");
+    expect(resumen).toHaveTextContent("Gabriel");
+    expect(resumen).toHaveTextContent("$ 904.50");
+    expect(screen.queryByRole("heading", { name: /valor de caja/i })).not.toBeInTheDocument();
+  });
+
+  it("replaces consulta results with subtotal general and vice versa", async () => {
+    authState.rol = "secretaria";
+    apiGet.mockImplementation((path: string) => {
+      if (path === "/api/v1/cajas") {
+        return Promise.resolve([...CAJAS]);
+      }
+      if (path === "/api/v1/cajas/saldo-general") {
+        return Promise.resolve({
+          subtotal_general: "1234.50",
+          cajas_incluidas: 3,
+          cajas: [
+            { caja: CAJAS[0], saldo_actual: "250.00" },
+            { caja: CAJAS[1], saldo_actual: "80.00" },
+            { caja: CAJAS[2], saldo_actual: "904.50" },
+          ],
+        });
+      }
+      if (path === "/api/v1/cajas/1/saldo") {
+        return Promise.resolve(saldoFor(CAJAS[0], "250.00"));
+      }
+      if (path === "/api/v1/cajas/1/movimientos?page=1") {
+        return Promise.resolve(
+          movimientosFor(CAJAS[0], "Movimiento de prueba consulta", 1, 1),
+        );
+      }
+      return Promise.reject(new Error(`Unexpected path: ${path}`));
+    });
+
+    render(
+      <MemoryRouter>
+        <ConsultaCajaPage />
+      </MemoryRouter>,
+    );
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: /^consulta$/i })).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /^consulta$/i }));
+    await waitFor(() => {
+      expect(screen.getByRole("heading", { name: /valor de caja/i })).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /subtotal general/i }));
+    await waitFor(() => {
+      expect(screen.getByRole("heading", { name: /subtotal general/i })).toBeInTheDocument();
+    });
+    expect(screen.queryByRole("heading", { name: /valor de caja/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: /valor en conjunto/i })).not.toBeInTheDocument();
+    expect(screen.queryByText("Movimiento de prueba consulta")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /^consulta$/i }));
+    await waitFor(() => {
+      expect(screen.getByRole("heading", { name: /valor de caja/i })).toBeInTheDocument();
+    });
+    expect(screen.queryByRole("heading", { name: /subtotal general/i })).not.toBeInTheDocument();
   });
 });

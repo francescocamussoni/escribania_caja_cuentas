@@ -12,7 +12,7 @@ del nombre). El alta inicial y el reset operativo se hacen con
 
 | Rol | Permisos en la app | Pantallas |
 |-----|-------------------|-----------|
-| **secretaria** | Registrar, editar y eliminar movimientos; consultar | `/registro`, `/consulta` |
+| **secretaria** | Registrar, editar y eliminar movimientos; consultar; alta/archivo de cajas | `/registro`, `/consulta`, `/configuracion` |
 | **escribano** | Solo consulta (saldo e historial) | `/consulta` |
 
 El rol se almacena en `usuario.rol` y viaja en el JWT (`rol` claim). El backend
@@ -38,7 +38,7 @@ admin y las cajas si no existen (idempotente).
 
 Tras el primer deploy, `bootstrap_production` crea:
 
-- Las **15 cajas** del catálogo
+- Las **15 cajas** iniciales del catálogo de seed (altas posteriores vía Configuración)
 - **Un usuario admin** con credenciales de SSM:
   - `ADMIN_USERNAME` ← `/escribania/prod/admin_username`
   - `ADMIN_PASSWORD` ← `/escribania/prod/admin_password`

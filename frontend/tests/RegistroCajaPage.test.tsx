@@ -151,4 +151,47 @@ describe("RegistroCajaPage", () => {
 
     expect(screen.queryByRole("checkbox", { name: /bambina/i })).not.toBeInTheDocument();
   });
+
+  it("does not list archived cajas in the selector or additional boxes", async () => {
+    apiGet.mockImplementation((path: string) => {
+      if (path === "/api/v1/cajas") {
+        return Promise.resolve([
+          { id: 1, nombre: "Bambina", slug: "bambina", estado: "activa" },
+          { id: 2, nombre: "Ebel", slug: "ebel", estado: "activa" },
+        ]);
+      }
+      if (path === "/api/v1/cajas/1/saldo") {
+        return Promise.resolve({
+          caja: { id: 1, nombre: "Bambina", slug: "bambina" },
+          saldo_actual: "0.00",
+          ultimo_movimiento_at: null,
+        });
+      }
+      if (path.startsWith("/api/v1/cajas/1/movimientos")) {
+        return Promise.resolve({
+          items: [],
+          page: 1,
+          page_size: 20,
+          total_items: 0,
+          total_pages: 0,
+        });
+      }
+      return Promise.reject(new Error(`Unexpected path: ${path}`));
+    });
+
+    render(
+      <MemoryRouter>
+        <RegistroCajaPage />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("Bambina")).toBeInTheDocument();
+    });
+    fireEvent.click(screen.getByText("Registrar también en otras cajas"));
+
+    expect(screen.queryByText("Caja Archivada")).not.toBeInTheDocument();
+    expect(screen.queryByRole("checkbox", { name: /caja archivada/i })).not.toBeInTheDocument();
+    expect(screen.getByRole("checkbox", { name: /ebel/i })).toBeInTheDocument();
+  });
 });

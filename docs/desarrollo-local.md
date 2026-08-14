@@ -35,7 +35,7 @@ ENVIRONMENT=development
 ```bash
 make up        # postgres + backend + frontend
 make migrate   # alembic upgrade head
-make seed      # 15 cajas + admin + escribano (solo dev)
+make seed      # 15 cajas iniciales + admin + escribano (solo dev)
 ```
 
 Equivalente manual:

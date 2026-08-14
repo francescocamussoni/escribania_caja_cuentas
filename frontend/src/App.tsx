@@ -2,6 +2,7 @@ import { Navigate, Outlet, Route, Routes } from "react-router-dom";
 
 import { Navbar } from "./components/layout/Navbar";
 import { useAuth } from "./hooks/useAuth";
+import ConfiguracionCajasPage from "./pages/ConfiguracionCajasPage";
 import ConsultaCajaPage from "./pages/ConsultaCajaPage";
 import ConsultaPlazosFijosPage from "./pages/ConsultaPlazosFijosPage";
 import ImpresionPage from "./pages/ImpresionPage";
@@ -69,6 +70,14 @@ export default function App() {
         }
       >
         <Route path="/" element={<HomePage />} />
+        <Route
+          path="/configuracion"
+          element={
+            <SecretariaOnlyRoute>
+              <ConfiguracionCajasPage />
+            </SecretariaOnlyRoute>
+          }
+        />
         <Route
           path="/registro"
           element={
