@@ -1,6 +1,6 @@
 .PHONY: up down build logs migrate db-stamp seed test test-backend test-frontend ps \
-	deploy-aws smoke-aws validate-infra validate-infra-contract validate-outputs-security \
-	check-secrets preprod-checklist
+	deploy-aws create-user-aws smoke-aws validate-infra validate-infra-contract \
+	validate-outputs-security check-secrets preprod-checklist
 
 COMPOSE := docker compose
 
@@ -46,6 +46,11 @@ test-frontend:
 #   make deploy-aws ARGS="--skip-terraform"
 deploy-aws:
 	./scripts/deploy-aws.sh $(ARGS)
+
+# Production user create/reset (prompts for password). Example:
+#   make create-user-aws ARGS='--username juan.perez --rol escribano'
+create-user-aws:
+	./scripts/aws-create-user.sh $(ARGS)
 
 smoke-aws:
 	./scripts/smoke-aws.sh

@@ -140,6 +140,7 @@ Contrato: `specs/002-aws-deploy/contracts/smoke-tests.md`.
 | `make validate-infra` | `terraform fmt/validate` + contrato INF-001–010 |
 | `make check-secrets` | Escaneo de secretos en el repo |
 | `make deploy-aws` | Orquestación completa |
+| `make create-user-aws` | Alta/reset de usuario en prod (pide contraseña) |
 | `make smoke-aws` | Tests post-deploy |
 | `make preprod-checklist` | Checklist §13 del quickstart |
 
@@ -157,7 +158,8 @@ Al arrancar el contenedor (`entrypoint.sh`):
 2. `bootstrap_production` — 15 cajas + usuario admin desde SSM
 3. **No** crea `escribano` ni movimientos de prueba
 
-Ver [usuarios-y-contraseñas.md](./usuarios-y-contraseñas.md) para altas adicionales.
+Ver [usuarios-y-contraseñas.md](./usuarios-y-contraseñas.md) para altas adicionales
+(`./scripts/aws-create-user.sh --username … --rol escribano`).
 
 ## Operaciones destructivas
 

@@ -119,7 +119,8 @@ Casos verificados: ver [contracts/smoke-tests.md](./contracts/smoke-tests.md).
 1. Abrir `public_url` en el navegador.
 2. Iniciar sesión con `ADMIN_USER` / `ADMIN_PASS` (rol secretaria).
 3. Verificar: 15 cajas disponibles, sin movimientos históricos.
-4. Crear usuarios adicionales (escribanos) según [docs/usuarios-y-contraseñas.md](../../docs/usuarios-y-contraseñas.md).
+4. Crear usuarios adicionales (escribanos) según [docs/usuarios-y-contraseñas.md](../../docs/usuarios-y-contraseñas.md)
+   (`./scripts/aws-create-user.sh --username … --rol escribano`).
 
 ## 9. Actualizar aplicación (sin perder datos)
 

@@ -11,7 +11,7 @@ dinero en 15 cajas/cuentas de una escribanía, con control de acceso por rol.
 | [Frontend](./frontend.md) | React, rutas, componentes, build |
 | [Desarrollo local](./desarrollo-local.md) | Docker Compose, Makefile, tests |
 | [Desarrollo AWS](./desarrollo-aws.md) | Terraform, deploy, smoke tests, actualizaciones |
-| [Usuarios y contraseñas](./usuarios-y-contraseñas.md) | Roles, bootstrap, alta de escribanos |
+| [Usuarios y contraseñas](./usuarios-y-contraseñas.md) | Roles, bootstrap, alta de usuarios (`aws-create-user.sh`) |
 
 ## Quickstart (5 minutos)
 

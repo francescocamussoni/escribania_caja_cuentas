@@ -96,7 +96,7 @@ En producción, CloudFront expone `/api/health` reescrito a `/health` en el orig
 
 - `username` (único), `password_hash`, `rol` (`secretaria` | `escribano`)
 - `password_changed_at` (timestamptz, nullable): instante del último cambio de clave; `null` si nunca se cambió. Alembic `005_usuario_password_changed_at`
-- Sin API de administración de usuarios; ver [usuarios-y-contraseñas.md](./usuarios-y-contraseñas.md)
+- Sin API de administración de usuarios; alta/reset operativo: `python -m app.create_user` (ver [usuarios-y-contraseñas.md](./usuarios-y-contraseñas.md))
 
 ### `caja`
 

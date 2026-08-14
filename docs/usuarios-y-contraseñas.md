@@ -5,8 +5,8 @@ endpoints REST para crear, editar o eliminar usuarios; la gestión es por bootst
 seed de desarrollo o intervención directa en base de datos.
 
 Cada usuario **sí** puede cambiar **su propia** contraseña desde la UI (login o menú
-del nombre). El script en EC2 queda como **rescate** (usuario bloqueado, alta inicial,
-reset operativo).
+del nombre). El alta inicial y el reset operativo se hacen con
+`scripts/aws-create-user.sh` (o `python -m app.create_user` en el contenedor).
 
 ## Roles
 
@@ -77,82 +77,57 @@ No hay que tocar EC2 ni SSM para un cambio rutinario. Si se cambia el admin de
 bootstrap, conviene alinear SSM `admin_password` para documentación y futuros
 reprocesos.
 
-## Alta de un escribano (producción)
+## Alta de usuarios (producción)
 
-No hay API. Opción recomendada: script Python dentro del contenedor en EC2.
+No hay API. Crear secretaria o escribano con el script operativo. **Pedirá la
+contraseña dos veces** (no se ve en pantalla ni se pasa con `--password`).
 
-### Vía SSM Session Manager + Docker
+El script corre contra el contenedor que ya está en EC2 (no hace falta un
+deploy previo). Tras desplegar esta versión, también podés usar
+`python -m app.create_user` si estás en la instancia.
 
-1. Conectarse a la instancia EC2 (Session Manager en consola AWS).
-2. Identificar el contenedor: `docker ps`
-3. Ejecutar (reemplazar usuario y contraseña):
+### Desde tu máquina (recomendado)
 
 ```bash
-docker exec -i <container_id> python <<'PY'
-from app.db.session import SessionLocal
-from app.models.usuario import Usuario
-from app.core.security import hash_password
-from sqlalchemy import select
+./scripts/aws-create-user.sh --username juan.perez --rol escribano
+# o
+make create-user-aws ARGS='--username juan.perez --rol escribano'
 
-username = "nombre.escribano"
-password = "ContraseñaSegura123!"
-rol = "escribano"
-
-db = SessionLocal()
-try:
-    if db.scalar(select(Usuario).where(Usuario.username == username)):
-        print(f"Usuario {username} ya existe")
-    else:
-        db.add(Usuario(
-            username=username,
-            password_hash=hash_password(password),
-            rol=rol,
-        ))
-        db.commit()
-        print(f"Usuario {username} creado ({rol})")
-finally:
-    db.close()
-PY
+# Secretaria adicional:
+./scripts/aws-create-user.sh --username maria.secretaria --rol secretaria
 ```
 
-### Vía desarrollo local (misma BD remota — no recomendado)
+El script:
 
-Solo si tenés `DATABASE_URL` de RDS accesible; preferir el método en EC2.
+1. Pide **Contraseña** y **Confirmar contraseña**.
+2. La guarda unos segundos en SSM Parameter Store (`SecureString` bajo
+   `/escribania/prod/ops/…`) y la borra al terminar.
+3. En EC2, el contenedor `escribania-api` crea el usuario con hash bcrypt.
+4. Entregá la clave al usuario por un canal aparte; puede cambiarla después
+   desde el login.
 
-## Alta de una secretaria adicional
+Roles: `escribano` (consulta) o `secretaria` (registro + consulta).
 
-Mismo procedimiento que escribano, con `rol = "secretaria"`.
-
-## Cambiar contraseña (rescate operativo)
-
-Usar el autoservicio salvo que el usuario no pueda autenticarse. El script **debe**
-actualizar `password_changed_at` para invalidar sesiones JWT vigentes (igual que la API).
+### Si ya estás en la instancia (Session Manager)
 
 ```bash
-docker exec -i <container_id> python <<'PY'
-from datetime import datetime, timezone
+docker exec -it escribania-api python -m app.create_user \
+  --username juan.perez --rol escribano
+```
 
-from app.db.session import SessionLocal
-from app.models.usuario import Usuario
-from app.core.security import hash_password
-from sqlalchemy import select
+También pide la contraseña de forma interactiva.
 
-username = "prod-admin"
-new_password = "NuevaContraseñaSegura!"
+### Reset operativo (usuario bloqueado)
 
-db = SessionLocal()
-try:
-    user = db.scalar(select(Usuario).where(Usuario.username == username))
-    if user is None:
-        print(f"Usuario {username} no encontrado")
-    else:
-        user.password_hash = hash_password(new_password)
-        user.password_changed_at = datetime.now(timezone.utc)
-        db.commit()
-        print(f"Contraseña actualizada para {username}")
-finally:
-    db.close()
-PY
+Usar el autoservicio salvo que el usuario no pueda autenticarse. El reset
+**debe** actualizar `password_changed_at` para invalidar sesiones JWT vigentes.
+
+```bash
+./scripts/aws-create-user.sh --username juan.perez --reset
+
+# o en EC2:
+docker exec -it escribania-api python -m app.create_user \
+  --username juan.perez --reset
 ```
 
 Si cambiás la contraseña del admin de bootstrap, actualizá también SSM
@@ -195,6 +170,6 @@ en ese caso desactivar por política de negocio (no implementado) o no eliminar.
 | Acción | Desarrollo | Producción |
 |--------|------------|------------|
 | Primer admin | `.env` + `make seed` | SSM + `bootstrap_production` |
-| Usuario escribano de prueba | `make seed` | Crear manualmente (script arriba) |
-| Cambiar contraseña | UI login o menú del nombre | Mismo autoservicio; script EC2 solo como rescate |
+| Usuario escribano / secretaria extra | `make seed` | `./scripts/aws-create-user.sh --username … --rol …` |
+| Cambiar contraseña | UI login o menú del nombre | Mismo autoservicio; `--reset` solo como rescate |
 | Panel de usuarios | No existe | No existe (futuro) |
