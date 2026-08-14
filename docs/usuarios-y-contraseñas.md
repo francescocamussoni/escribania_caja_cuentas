@@ -4,11 +4,15 @@ La aplicación tiene dos roles. **No existe panel de administración de usuarios
 endpoints REST para crear, editar o eliminar usuarios; la gestión es por bootstrap,
 seed de desarrollo o intervención directa en base de datos.
 
+Cada usuario **sí** puede cambiar **su propia** contraseña desde la UI (login o menú
+del nombre). El script en EC2 queda como **rescate** (usuario bloqueado, alta inicial,
+reset operativo).
+
 ## Roles
 
 | Rol | Permisos en la app | Pantallas |
 |-----|-------------------|-----------|
-| **secretaria** | Registrar, editar y eliminar movimientos (ventana 24 h); consultar | `/registro`, `/consulta` |
+| **secretaria** | Registrar, editar y eliminar movimientos; consultar | `/registro`, `/consulta` |
 | **escribano** | Solo consulta (saldo e historial) | `/consulta` |
 
 El rol se almacena en `usuario.rol` y viaja en el JWT (`rol` claim). El backend
@@ -51,7 +55,27 @@ Tras el primer deploy, `bootstrap_production` crea:
 
 El hash bcrypt está en PostgreSQL (`usuario.password_hash`). SSM guarda la contraseña
 en texto para bootstrap inicial; **cambiar la contraseña de un usuario existente**
-requiere actualizar la tabla `usuario`, no solo SSM.
+por autoservicio actualiza la tabla `usuario` (hash + `password_changed_at`). Un
+cambio solo en SSM **no** actualiza al usuario ya creado (`bootstrap_production` no
+sobrescribe).
+
+## Autoservicio (recomendado)
+
+Secretaria y escribano cambian **solo su** clave. No hay recuperación por correo ni
+reset por otro usuario desde la app.
+
+| Dónde | Cómo |
+|-------|------|
+| Pantalla de **login** | Enlace **Cambiar contraseña** (sustituye el formulario). Body: `username`, `current_password`, `new_password`, `new_password_confirm` → `POST /api/v1/auth/change-password` |
+| **Dentro de la app** | Clic en el nombre (arriba a la derecha) → misma terna de claves → `POST /api/v1/auth/me/password` (JWT). Luego logout y volver a ingresar |
+
+Reglas: mínimo **8** caracteres; distinta de la actual; confirmación igual. 401 genérico
+si usuario o clave actual no coinciden (flujo público). Tras éxito se setea
+`password_changed_at` y los JWT con `iat` anterior dejan de valer.
+
+No hay que tocar EC2 ni SSM para un cambio rutinario. Si se cambia el admin de
+bootstrap, conviene alinear SSM `admin_password` para documentación y futuros
+reprocesos.
 
 ## Alta de un escribano (producción)
 
@@ -99,10 +123,15 @@ Solo si tenés `DATABASE_URL` de RDS accesible; preferir el método en EC2.
 
 Mismo procedimiento que escribano, con `rol = "secretaria"`.
 
-## Cambiar contraseña de un usuario existente
+## Cambiar contraseña (rescate operativo)
+
+Usar el autoservicio salvo que el usuario no pueda autenticarse. El script **debe**
+actualizar `password_changed_at` para invalidar sesiones JWT vigentes (igual que la API).
 
 ```bash
 docker exec -i <container_id> python <<'PY'
+from datetime import datetime, timezone
+
 from app.db.session import SessionLocal
 from app.models.usuario import Usuario
 from app.core.security import hash_password
@@ -118,6 +147,7 @@ try:
         print(f"Usuario {username} no encontrado")
     else:
         user.password_hash = hash_password(new_password)
+        user.password_changed_at = datetime.now(timezone.utc)
         db.commit()
         print(f"Contraseña actualizada para {username}")
 finally:
@@ -154,8 +184,9 @@ en ese caso desactivar por política de negocio (no implementado) o no eliminar.
 ## Seguridad
 
 - Contraseñas hasheadas con **bcrypt**; nunca se almacenan en texto plano en BD
-- JWT expira en **8 horas** (`JWT_EXPIRE_HOURS`)
-- Tokens en **sessionStorage** (frontend); se pierden al cerrar pestaña
+- JWT expira en **8 horas** (`JWT_EXPIRE_HOURS`); incluye `iat`. Tras un cambio de clave,
+  tokens anteriores reciben 401
+- Tokens en **sessionStorage** (frontend); se pierden al cerrar pestaña o al logout post-cambio
 - No loguear contraseñas ni tokens en aplicación
 - `make check-secrets` antes de cada merge
 
@@ -165,5 +196,5 @@ en ese caso desactivar por política de negocio (no implementado) o no eliminar.
 |--------|------------|------------|
 | Primer admin | `.env` + `make seed` | SSM + `bootstrap_production` |
 | Usuario escribano de prueba | `make seed` | Crear manualmente (script arriba) |
-| Cambiar contraseña | Recrear en BD o script | Script en contenedor EC2 |
+| Cambiar contraseña | UI login o menú del nombre | Mismo autoservicio; script EC2 solo como rescate |
 | Panel de usuarios | No existe | No existe (futuro) |

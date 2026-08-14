@@ -19,6 +19,10 @@ class Usuario(Base):
     username: Mapped[str] = mapped_column(String(50), unique=True, nullable=False)
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     rol: Mapped[str] = mapped_column(String(20), nullable=False)
+    password_changed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),

@@ -1,0 +1,123 @@
+openapi: 3.0.3
+info:
+  title: Cambio de Contraseña — Escribanía API
+  version: "1.0.0"
+  description: >
+    Contratos nuevos de la feature 005. La consulta conjunta reutiliza
+    GET /api/v1/cajas/{id}/saldo y GET /api/v1/cajas/{id}/movimientos
+    documentados en specs/001-registro-cajas/contracts/openapi.yaml.
+
+servers:
+  - url: http://localhost:8000
+    description: Desarrollo local
+
+tags:
+  - name: auth
+
+paths:
+  /api/v1/auth/change-password:
+    post:
+      tags: [auth]
+      summary: Cambiar contraseña sin sesión (pantalla de login)
+      operationId: changePasswordPublic
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ChangePasswordPublicRequest"
+      responses:
+        "204":
+          description: Contraseña actualizada; no se emite token
+        "401":
+          description: Usuario inexistente o contraseña actual incorrecta (mensaje genérico)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "422":
+          description: Validación (longitud, confirmación, igual a la actual)
+
+  /api/v1/auth/me/password:
+    post:
+      tags: [auth]
+      summary: Cambiar la propia contraseña (usuario autenticado)
+      operationId: changePasswordAuthenticated
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ChangePasswordAuthenticatedRequest"
+      responses:
+        "204":
+          description: Contraseña actualizada; tokens con iat anterior dejan de valer
+        "401":
+          description: No autenticado, token invalidado, o contraseña actual incorrecta
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "422":
+          description: Validación (longitud, confirmación, igual a la actual)
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    ChangePasswordPublicRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - username
+        - current_password
+        - new_password
+        - new_password_confirm
+      properties:
+        username:
+          type: string
+          minLength: 1
+          maxLength: 50
+        current_password:
+          type: string
+          minLength: 1
+        new_password:
+          type: string
+          minLength: 8
+        new_password_confirm:
+          type: string
+          minLength: 8
+
+    ChangePasswordAuthenticatedRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - current_password
+        - new_password
+        - new_password_confirm
+      properties:
+        current_password:
+          type: string
+          minLength: 1
+        new_password:
+          type: string
+          minLength: 8
+        new_password_confirm:
+          type: string
+          minLength: 8
+
+    ErrorMessage:
+      type: object
+      additionalProperties: false
+      required: [detail]
+      properties:
+        detail:
+          type: string
+          example: Credenciales inválidas

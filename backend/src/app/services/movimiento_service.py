@@ -6,7 +6,6 @@ from sqlalchemy.orm import Session
 
 from app.models.movimiento import Movimiento
 from app.models.usuario import Usuario
-from app.schemas.movimiento import ensure_within_edit_window
 
 VALID_TIPOS = frozenset({"entrada", "salida"})
 
@@ -101,8 +100,6 @@ class MovimientoService:
         if movimiento is None:
             raise MovimientoNotFoundError()
 
-        ensure_within_edit_window(movimiento, user)
-
         if descripcion is not None:
             cleaned_description = descripcion.strip()
             if not cleaned_description:
@@ -140,7 +137,6 @@ class MovimientoService:
         if movimiento is None:
             raise MovimientoNotFoundError()
 
-        ensure_within_edit_window(movimiento, user)
         self.db.delete(movimiento)
         self.db.flush()
         self.recalculate_subtotals(caja_id)

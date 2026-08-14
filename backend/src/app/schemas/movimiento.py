@@ -1,5 +1,5 @@
 import re
-from datetime import datetime, timedelta, timezone
+from datetime import datetime
 from decimal import Decimal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -106,23 +106,8 @@ def format_decimal(value: Decimal) -> str:
     return f"{value:.2f}"
 
 
-def is_editable(movimiento: Movimiento, user: Usuario) -> bool:
-    if user.rol != "secretaria":
-        return False
-    cutoff = datetime.now(timezone.utc) - timedelta(hours=24)
-    created_at = movimiento.created_at
-    if created_at.tzinfo is None:
-        created_at = created_at.replace(tzinfo=timezone.utc)
-    return created_at >= cutoff
-
-
-class MovimientoWindowExpiredError(Exception):
-    """Raised when a movimiento is outside the 24h edit window."""
-
-
-def ensure_within_edit_window(movimiento: Movimiento, user: Usuario) -> None:
-    if not is_editable(movimiento, user):
-        raise MovimientoWindowExpiredError("Ventana de 24h expirada")
+def is_editable(_movimiento: Movimiento, user: Usuario) -> bool:
+    return user.rol == "secretaria"
 
 
 def movimiento_to_response(movimiento: Movimiento, user: Usuario) -> MovimientoResponse:

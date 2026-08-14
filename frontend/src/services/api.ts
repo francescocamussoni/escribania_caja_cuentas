@@ -69,6 +69,31 @@ export async function apiDelete(path: string): Promise<void> {
   return apiRequest<void>(path, { method: "DELETE" });
 }
 
+export type ChangePasswordPublicPayload = {
+  username: string;
+  current_password: string;
+  new_password: string;
+  new_password_confirm: string;
+};
+
+export async function postChangePasswordPublic(
+  payload: ChangePasswordPublicPayload,
+): Promise<void> {
+  await apiPost<void>("/api/v1/auth/change-password", payload);
+}
+
+export type ChangePasswordAuthenticatedPayload = {
+  current_password: string;
+  new_password: string;
+  new_password_confirm: string;
+};
+
+export async function postChangePasswordMe(
+  payload: ChangePasswordAuthenticatedPayload,
+): Promise<void> {
+  await apiPost<void>("/api/v1/auth/me/password", payload);
+}
+
 export type Caja = {
   id: number;
   nombre: string;

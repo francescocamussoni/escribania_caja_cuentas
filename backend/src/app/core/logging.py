@@ -9,6 +9,9 @@ from typing import Any
 SENSITIVE_KEYS = frozenset(
     {
         "password",
+        "current_password",
+        "new_password",
+        "new_password_confirm",
         "password_hash",
         "access_token",
         "token",

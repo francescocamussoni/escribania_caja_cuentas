@@ -8,7 +8,7 @@ import {
   type ReactNode,
 } from "react";
 
-import { apiPost, getAuthToken, setAuthToken } from "../services/api";
+import { apiPost, getAuthToken, postChangePasswordMe, setAuthToken } from "../services/api";
 
 const TOKEN_KEY = "auth_token";
 const ROL_KEY = "auth_rol";
@@ -30,6 +30,11 @@ type AuthState = {
 type AuthContextValue = AuthState & {
   isAuthenticated: boolean;
   login: (username: string, password: string) => Promise<LoginResponse>;
+  changePassword: (
+    currentPassword: string,
+    newPassword: string,
+    newPasswordConfirm: string,
+  ) => Promise<void>;
   logout: () => void;
 };
 
@@ -76,6 +81,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setAuthState({ token: null, rol: null, username: null });
   }, []);
 
+  const changePassword = useCallback(
+    async (
+      currentPassword: string,
+      newPassword: string,
+      newPasswordConfirm: string,
+    ) => {
+      await postChangePasswordMe({
+        current_password: currentPassword,
+        new_password: newPassword,
+        new_password_confirm: newPasswordConfirm,
+      });
+      logout();
+    },
+    [logout],
+  );
+
   const value = useMemo<AuthContextValue>(
     () => ({
       token,
@@ -83,9 +104,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       username,
       isAuthenticated: Boolean(token ?? getAuthToken()),
       login,
+      changePassword,
       logout,
     }),
-    [token, rol, username, login, logout],
+    [token, rol, username, login, changePassword, logout],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

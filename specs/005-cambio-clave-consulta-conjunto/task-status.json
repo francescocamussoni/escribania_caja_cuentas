@@ -1,0 +1,51 @@
+{
+  "feature": "005-cambio-clave-consulta-conjunto",
+  "updated": "2026-08-14",
+  "tasks": {
+    "T001": { "status": "done" },
+    "T002": { "status": "done" },
+    "T003": { "status": "done" },
+    "T004": { "status": "done" },
+    "T005": { "status": "done" },
+    "T006": { "status": "done" },
+    "T007": { "status": "done" },
+    "T008": { "status": "done" },
+    "T009": { "status": "done" },
+    "T010": { "status": "done" },
+    "T011": { "status": "done" },
+    "T012": { "status": "done" },
+    "T013": { "status": "done" },
+    "T014": { "status": "done" },
+    "T015": { "status": "done" },
+    "T016": { "status": "done" },
+    "T017": { "status": "done" },
+    "T018": { "status": "done" },
+    "T019": { "status": "done" },
+    "T020": { "status": "done" },
+    "T021": { "status": "done" },
+    "T022": { "status": "done" },
+    "T023": { "status": "done" },
+    "T024": { "status": "done" },
+    "T025": { "status": "done" },
+    "T026": { "status": "done" },
+    "T027": { "status": "done" },
+    "T028": { "status": "done" },
+    "T029": { "status": "done" },
+    "T030": { "status": "done" },
+    "T031": {
+      "status": "done",
+      "refactor_of": "T024",
+      "note": "amend FR-018a Valor en conjunto tests"
+    },
+    "T032": {
+      "status": "done",
+      "refactor_of": "T026",
+      "note": "amend FR-018a panel Valor en conjunto"
+    },
+    "T033": {
+      "status": "done",
+      "refactor_of": "T028",
+      "note": "amend FR-018a docs/frontend.md"
+    }
+  }
+}

@@ -6,6 +6,7 @@ type CajasAdicionalesSelectorProps = {
   selectedCajaIds: number[];
   onChange: (selectedCajaIds: number[]) => void;
   disabled?: boolean;
+  summary?: string;
 };
 
 export default function CajasAdicionalesSelector({
@@ -14,6 +15,7 @@ export default function CajasAdicionalesSelector({
   selectedCajaIds,
   onChange,
   disabled = false,
+  summary = "Registrar también en otras cajas",
 }: CajasAdicionalesSelectorProps) {
   const otherCajas = cajas.filter((caja) => caja.id !== activeCajaId);
 
@@ -32,7 +34,7 @@ export default function CajasAdicionalesSelector({
   return (
     <details className="cajas-adicionales">
       <summary className="cajas-adicionales__summary">
-        Registrar también en otras cajas
+        {summary}
         {selectedCajaIds.length > 0 ? (
           <span className="cajas-adicionales__count">
             {selectedCajaIds.length} seleccionada

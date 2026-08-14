@@ -82,6 +82,46 @@ select {
   display: flex;
   align-items: center;
   gap: 0.75rem;
+  position: relative;
+}
+
+.navbar__user-menu {
+  position: relative;
+}
+
+.navbar__username {
+  border: none;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  padding: 0.35rem 0.5rem;
+  border-radius: 0.375rem;
+}
+
+.navbar__username:hover,
+.navbar__username[aria-expanded="true"] {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.navbar__password-panel {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 0.5rem);
+  width: 16rem;
+  background: #fff;
+  color: #1a1a2e;
+  border-radius: 0.5rem;
+  padding: 0.85rem;
+  box-shadow: 0 8px 24px rgba(22, 33, 62, 0.2);
+  display: grid;
+  gap: 0.65rem;
+  z-index: 20;
+}
+
+.navbar__password-title {
+  margin: 0;
+  font-weight: 600;
 }
 
 .navbar__logout {
@@ -118,6 +158,31 @@ select {
 .login-card__subtitle {
   margin: 0;
   color: #5b6477;
+}
+
+.login-card__link {
+  border: none;
+  background: none;
+  color: #0f4c81;
+  cursor: pointer;
+  padding: 0;
+  text-align: center;
+  text-decoration: underline;
+}
+
+.login-card__link:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.login-card__actions {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.form-success {
+  margin: 0;
+  color: var(--color-success);
 }
 
 .field {
@@ -207,6 +272,49 @@ select {
   font-size: 1.5rem;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
+}
+
+.consulta-conjunto {
+  display: grid;
+  gap: 0.75rem;
+  margin: 1.5rem 0;
+}
+
+.caja-consulta-solapa {
+  background: #fff;
+  border-radius: 0.75rem;
+  box-shadow: 0 4px 16px rgba(22, 33, 62, 0.08);
+}
+
+.caja-consulta-solapa__summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  cursor: pointer;
+  list-style: none;
+  padding: 1rem 1.25rem;
+  font-weight: 600;
+  color: #0f4c81;
+}
+
+.caja-consulta-solapa__summary::-webkit-details-marker {
+  display: none;
+}
+
+.caja-consulta-solapa__summary::before {
+  content: "▸";
+  display: inline-block;
+  margin-right: 0.5rem;
+  transition: transform 0.15s ease;
+}
+
+.caja-consulta-solapa[open] .caja-consulta-solapa__summary::before {
+  transform: rotate(90deg);
+}
+
+.caja-consulta-solapa__body {
+  padding: 0 1.25rem 1.25rem;
 }
 
 .movimiento-form-section {
@@ -462,6 +570,24 @@ select {
 }
 
 .consulta-controls .caja-selector {
+  flex: 1;
+  min-width: 200px;
+}
+
+.consulta-controls--stack {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.75rem;
+}
+
+.consulta-controls__row {
+  display: flex;
+  align-items: flex-end;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.consulta-controls__row .caja-selector {
   flex: 1;
   min-width: 200px;
 }

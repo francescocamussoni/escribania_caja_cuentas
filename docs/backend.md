@@ -35,7 +35,7 @@ backend/
 │   ├── db/                  # session, base
 │   ├── models/              # Usuario, Caja, Movimiento
 │   ├── schemas/             # Pydantic request/response
-│   └── services/            # Lógica de negocio (subtotales, ventana 24h)
+│   └── services/            # Lógica de negocio (subtotales, auth)
 └── tests/
     ├── unit/
     └── integration/
@@ -50,6 +50,21 @@ Prefijo base: `/api/v1`. Documentación interactiva: `/docs` (Swagger).
 | Método | Ruta | Auth | Descripción |
 |--------|------|------|-------------|
 | `POST` | `/api/v1/auth/login` | No | Devuelve JWT + rol |
+| `POST` | `/api/v1/auth/change-password` | No | Cambiar clave con usuario + contraseña actual. **204** sin cuerpo |
+| `POST` | `/api/v1/auth/me/password` | JWT | Cambiar la propia clave (sin `username` en el body). **204** |
+
+Cuerpos: `current_password`, `new_password`, `new_password_confirm` (mínimo 8; confirmación igual; extra fields → **422**). En el flujo público también `username`. En `/me/password` un `username` extra es **422** (anti-IDOR).
+
+Respuestas de error:
+
+| Código | Cuándo |
+|--------|--------|
+| **401** | Credenciales actuales inválidas o token ausente/inválido. En el POST público el `detail` es el mismo mensaje genérico que un login fallido |
+| **422** | Validación (largo, confirmación, misma clave que la actual, campos extra) |
+
+Tras un cambio exitoso se actualiza `usuario.password_changed_at` (UTC). Los JWT emitidos **antes** de ese instante dejan de autorizar (`get_current_user` → 401).
+
+Contrato: `specs/005-cambio-clave-consulta-conjunto/contracts/openapi.yaml`.
 
 ### Cajas
 
@@ -64,8 +79,8 @@ Prefijo base: `/api/v1`. Documentación interactiva: `/docs` (Swagger).
 |--------|------|-----|-------------|
 | `GET` | `/api/v1/cajas/{id}/movimientos?page=N` | Cualquiera autenticado | Historial (20 por página, más recientes primero) |
 | `POST` | `/api/v1/cajas/{id}/movimientos` | **secretaria** | Crear entrada/salida |
-| `PATCH` | `/api/v1/cajas/{id}/movimientos/{mid}` | **secretaria** | Editar (ventana 24 h) |
-| `DELETE` | `/api/v1/cajas/{id}/movimientos/{mid}` | **secretaria** | Eliminar (ventana 24 h) |
+| `PATCH` | `/api/v1/cajas/{id}/movimientos/{mid}` | **secretaria** | Editar |
+| `DELETE` | `/api/v1/cajas/{id}/movimientos/{mid}` | **secretaria** | Eliminar |
 
 ### Health
 
@@ -80,6 +95,7 @@ En producción, CloudFront expone `/api/health` reescrito a `/health` en el orig
 ### `usuario`
 
 - `username` (único), `password_hash`, `rol` (`secretaria` | `escribano`)
+- `password_changed_at` (timestamptz, nullable): instante del último cambio de clave; `null` si nunca se cambió. Alembic `005_usuario_password_changed_at`
 - Sin API de administración de usuarios; ver [usuarios-y-contraseñas.md](./usuarios-y-contraseñas.md)
 
 ### `caja`
@@ -121,10 +137,12 @@ el usuario `escribano` de prueba (`seed.py` rechaza `ENVIRONMENT=production`).
 ## Seguridad
 
 - Contraseñas con **bcrypt** (`core/security.py`)
-- JWT con algoritmo **HS256** explícito; payload: `sub`, `rol`, `exp`
+- JWT con algoritmo **HS256** explícito; payload: `sub`, `rol`, `exp`, **`iat`** (NumericDate con fracción de segundo)
+- Si `password_changed_at` está definido y el token no tiene `iat` o `iat` es anterior al cambio → 401 (`UNAUTHORIZED_MESSAGE`)
+- Lógica de cambio de clave en `services/auth_service.py` (flush; commit en la ruta)
 - RBAC en rutas vía `require_role("secretaria")`
 - Headers de seguridad (`SecurityHeadersMiddleware`)
-- Logs de eventos de auth sin exponer contraseñas
+- Logs de eventos de auth y cambio de clave **sin** contraseñas ni tokens (`current_password` / `new_password` en denylist)
 
 ## Desarrollo sin Docker
 
@@ -146,8 +164,9 @@ make test-backend
 docker compose exec backend pytest -v
 ```
 
-Cobertura principal: auth, RBAC, movimientos, bootstrap de producción, ventana 24 h.
+Cobertura principal: auth (login, cambio de clave, corte de JWT), RBAC, movimientos, bootstrap de producción.
 
 ## Contrato OpenAPI
 
-Especificación en `specs/001-registro-cajas/contracts/openapi.yaml`.
+Especificación histórica: `specs/001-registro-cajas/contracts/openapi.yaml`.  
+Cambio de contraseña: `specs/005-cambio-clave-consulta-conjunto/contracts/openapi.yaml`.

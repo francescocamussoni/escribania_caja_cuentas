@@ -21,20 +21,39 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
     )
 
 
+def is_access_token_revoked_by_password_change(
+    iat: int | float | None,
+    password_changed_at: datetime | None,
+) -> bool:
+    if password_changed_at is None:
+        return False
+    if iat is None:
+        return True
+    changed = password_changed_at
+    if changed.tzinfo is None:
+        changed = changed.replace(tzinfo=timezone.utc)
+    return float(iat) < changed.timestamp()
+
+
 def create_access_token(subject: str, rol: str) -> tuple[str, int]:
     settings = get_settings()
     expires_in = settings.jwt_expire_hours * 3600
-    expire = datetime.now(timezone.utc) + timedelta(seconds=expires_in)
-    payload = {"sub": subject, "rol": rol, "exp": expire}
+    now = datetime.now(timezone.utc)
+    expire = now + timedelta(seconds=expires_in)
+    payload = {"sub": subject, "rol": rol, "exp": expire, "iat": now.timestamp()}
     token = jwt.encode(payload, settings.jwt_secret, algorithm=ALGORITHM)
     return token, expires_in
 
 
-def decode_access_token(token: str) -> dict[str, str]:
+def decode_access_token(token: str) -> dict[str, str | int]:
     settings = get_settings()
     payload = jwt.decode(token, settings.jwt_secret, algorithms=[ALGORITHM])
     subject = payload.get("sub")
     rol = payload.get("rol")
     if not subject or not rol:
         raise JWTError("Invalid token payload")
-    return {"sub": str(subject), "rol": str(rol)}
+    decoded: dict[str, str | int | float] = {"sub": str(subject), "rol": str(rol)}
+    iat = payload.get("iat")
+    if iat is not None:
+        decoded["iat"] = float(iat)
+    return decoded

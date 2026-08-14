@@ -244,7 +244,7 @@ async def test_delete_movimiento_recalculates_subsequent_subtotals(
 
 
 @pytest.mark.asyncio
-async def test_patch_movimiento_after_24h_returns_422(
+async def test_patch_movimiento_after_24h_is_allowed(
     client: AsyncClient,
     secretaria_headers: dict[str, str],
 ) -> None:
@@ -262,16 +262,16 @@ async def test_patch_movimiento_after_24h_returns_422(
 
     response = await client.patch(
         f"/api/v1/cajas/1/movimientos/{movimiento['id']}",
-        json={"descripcion": "Intento tardío"},
+        json={"descripcion": "Edición tardía"},
         headers=secretaria_headers,
     )
 
-    assert response.status_code == 422
-    assert "24h" in response.json()["detail"]
+    assert response.status_code == 200
+    assert response.json()["descripcion"] == "Edición tardía"
 
 
 @pytest.mark.asyncio
-async def test_delete_movimiento_after_24h_returns_422(
+async def test_delete_movimiento_after_24h_is_allowed(
     client: AsyncClient,
     secretaria_headers: dict[str, str],
 ) -> None:
@@ -292,8 +292,7 @@ async def test_delete_movimiento_after_24h_returns_422(
         headers=secretaria_headers,
     )
 
-    assert response.status_code == 422
-    assert "24h" in response.json()["detail"]
+    assert response.status_code == 204
 
 
 @pytest.mark.asyncio

@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
 
+import CajaConsultaSolapa from "../components/CajaConsultaSolapa";
 import CajaSelector from "../components/CajaSelector";
+import CajasAdicionalesSelector from "../components/CajasAdicionalesSelector";
 import MovimientoTable from "../components/MovimientoTable";
 import Pagination from "../components/Pagination";
 import {
@@ -11,13 +13,43 @@ import {
   type PaginatedMovimientos,
 } from "../services/api";
 
+function jointCajaIds(
+  principalId: number,
+  adicionalesIds: number[],
+  cajas: Caja[],
+): number[] {
+  const additional = cajas
+    .filter((caja) => caja.id !== principalId && adicionalesIds.includes(caja.id))
+    .map((caja) => caja.id);
+  return [principalId, ...additional];
+}
+
+function sumSaldoActual(saldos: CajaSaldo[]): string {
+  const totalCents = saldos.reduce((acc, item) => {
+    const negative = item.saldo_actual.trim().startsWith("-");
+    const [whole = "0", fraction = ""] = item.saldo_actual
+      .trim()
+      .replace("-", "")
+      .split(".");
+    const cents = Number(whole) * 100 + Number((fraction + "00").slice(0, 2));
+    return acc + (negative ? -cents : cents);
+  }, 0);
+  const sign = totalCents < 0 ? "-" : "";
+  const abs = Math.abs(totalCents);
+  return `${sign}${Math.floor(abs / 100)}.${String(abs % 100).padStart(2, "0")}`;
+}
+
 export default function ConsultaCajaPage() {
   const [cajas, setCajas] = useState<Caja[]>([]);
   const [selectedCajaId, setSelectedCajaId] = useState<number | null>(null);
+  const [adicionalesIds, setAdicionalesIds] = useState<number[]>([]);
   const [saldo, setSaldo] = useState<CajaSaldo | null>(null);
   const [movimientos, setMovimientos] = useState<Movimiento[]>([]);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(0);
+  const [saldosConjunto, setSaldosConjunto] = useState<CajaSaldo[]>([]);
+  const [consultaKey, setConsultaKey] = useState(0);
+  const [jointMode, setJointMode] = useState(false);
   const [loadingCajas, setLoadingCajas] = useState(true);
   const [loadingConsulta, setLoadingConsulta] = useState(false);
   const [hasConsulted, setHasConsulted] = useState(false);
@@ -35,6 +67,8 @@ export default function ConsultaCajaPage() {
     setMovimientos(movimientosResponse.items);
     setPage(movimientosResponse.page);
     setTotalPages(movimientosResponse.total_pages);
+    setJointMode(false);
+    setSaldosConjunto([]);
     setHasConsulted(true);
   }, []);
 
@@ -71,6 +105,16 @@ export default function ConsultaCajaPage() {
     };
   }, []);
 
+  function clearConsultaResult() {
+    setSaldo(null);
+    setMovimientos([]);
+    setPage(1);
+    setTotalPages(0);
+    setSaldosConjunto([]);
+    setJointMode(false);
+    setHasConsulted(false);
+  }
+
   async function handleConsulta() {
     if (!selectedCajaId) {
       return;
@@ -78,9 +122,22 @@ export default function ConsultaCajaPage() {
 
     setLoadingConsulta(true);
     setError(null);
+    clearConsultaResult();
 
     try {
-      await loadCajaData(selectedCajaId, 1);
+      if (adicionalesIds.length === 0) {
+        await loadCajaData(selectedCajaId, 1);
+        return;
+      }
+
+      const ids = jointCajaIds(selectedCajaId, adicionalesIds, cajas);
+      const saldos = await Promise.all(
+        ids.map((cajaId) => apiGet<CajaSaldo>(`/api/v1/cajas/${cajaId}/saldo`)),
+      );
+      setSaldosConjunto(saldos);
+      setJointMode(true);
+      setConsultaKey((key) => key + 1);
+      setHasConsulted(true);
     } catch {
       setError("No se pudieron cargar los datos de la caja.");
     } finally {
@@ -90,11 +147,8 @@ export default function ConsultaCajaPage() {
 
   async function handleCajaChange(cajaId: number) {
     setSelectedCajaId(cajaId);
-    setSaldo(null);
-    setMovimientos([]);
-    setPage(1);
-    setTotalPages(0);
-    setHasConsulted(false);
+    setAdicionalesIds((ids) => ids.filter((id) => id !== cajaId));
+    clearConsultaResult();
   }
 
   async function handlePageChange(nextPage: number) {
@@ -124,24 +178,50 @@ export default function ConsultaCajaPage() {
 
       {error ? <p className="form-error">{error}</p> : null}
 
-      <div className="consulta-controls">
-        <CajaSelector
+      <div className="consulta-controls consulta-controls--stack">
+        <div className="consulta-controls__row">
+          <CajaSelector
+            cajas={cajas}
+            selectedCajaId={selectedCajaId}
+            onChange={handleCajaChange}
+            disabled={isBusy}
+          />
+          <button
+            type="button"
+            className="button button--primary"
+            disabled={isBusy || !selectedCajaId}
+            onClick={handleConsulta}
+          >
+            Consulta
+          </button>
+        </div>
+        <CajasAdicionalesSelector
           cajas={cajas}
-          selectedCajaId={selectedCajaId}
-          onChange={handleCajaChange}
+          activeCajaId={selectedCajaId}
+          selectedCajaIds={adicionalesIds}
+          onChange={setAdicionalesIds}
           disabled={isBusy}
+          summary="Ver en conjunto con otras cajas"
         />
-        <button
-          type="button"
-          className="button button--primary"
-          disabled={isBusy || !selectedCajaId}
-          onClick={handleConsulta}
-        >
-          Consulta
-        </button>
       </div>
 
-      {hasConsulted ? (
+      {hasConsulted && jointMode ? (
+        <section className="consulta-conjunto" aria-live="polite">
+          <section className="saldo-panel">
+            <h2>Valor en conjunto</h2>
+            <p className="saldo-valor">$ {sumSaldoActual(saldosConjunto)}</p>
+          </section>
+          {saldosConjunto.map((item) => (
+            <CajaConsultaSolapa
+              key={`${consultaKey}-${item.caja.id}`}
+              caja={item.caja}
+              saldoActual={item.saldo_actual}
+            />
+          ))}
+        </section>
+      ) : null}
+
+      {hasConsulted && !jointMode ? (
         <>
           <section className="saldo-panel" aria-live="polite">
             <h2>Valor de caja</h2>

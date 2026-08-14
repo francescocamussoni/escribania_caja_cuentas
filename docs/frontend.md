@@ -31,6 +31,7 @@ frontend/
 │   │   ├── layout/Navbar.tsx
 │   │   ├── CajaSelector.tsx
 │   │   ├── CajasAdicionalesSelector.tsx
+│   │   ├── CajaConsultaSolapa.tsx
 │   │   ├── MovimientoForm.tsx
 │   │   ├── MovimientoTable.tsx
 │   │   ├── PlazoFijoForm.tsx
@@ -62,7 +63,7 @@ Guards en `App.tsx`:
 - `ProtectedRoute` — requiere token JWT
 - `SecretariaOnlyRoute` — redirige escribanos a `/consulta` (aplica a `/registro` y `/plazos-fijos`)
 
-Navbar (`Navbar.tsx`) muestra links según rol:
+Navbar (`Navbar.tsx`) muestra links según rol y, a la derecha, el **nombre de usuario** (abre el panel de cambio de clave) y **Salir**:
 
 | Link | Roles |
 |------|-------|
@@ -82,10 +83,14 @@ Navbar (`Navbar.tsx`) muestra links según rol:
 
 El token se envía en `Authorization: Bearer ...` vía `api.ts`.
 
+Tras un cambio de clave **autenticado** (`changePassword` → `POST /api/v1/auth/me/password`), el cliente hace **logout** y redirige a `/login`. Los JWT anteriores son rechazados por el backend.
+
 ## Cliente API
 
 `services/api.ts` centraliza llamadas a `/api/v1/...`:
 
+- `postChangePasswordPublic` — `POST /api/v1/auth/change-password` (login, sin JWT)
+- `postChangePasswordMe` — `POST /api/v1/auth/me/password` (sesión activa)
 - `fetchCajas`, `fetchCajaSaldo`, `fetchMovimientos`
 - `createMovimiento`, `updateMovimiento`, `deleteMovimiento`
 - `fetchPlazosFijosResumen`, `fetchPlazosFijos`
@@ -102,17 +107,25 @@ El token se envía en `Authorization: Bearer ...` vía `api.ts`.
 
 ## Pantallas
 
+### Login
+
+- Formulario de ingreso (usuario + contraseña)
+- Enlace **Cambiar contraseña**: sustituye el formulario de login (no es un overlay). Incluye usuario, contraseña actual, nueva y confirmación; **Cancelar** vuelve al ingreso
+- Tras un cambio público exitoso se muestra confirmación y se vuelve al formulario de login (hay que ingresar con la nueva clave)
+
 ### Registro de Caja (secretaria)
 
 - Selector de caja principal + cajas adicionales
 - Formulario: descripción, monto, botones Entrada/Salida
 - Tabla paginada (20 filas): descripción, monto, subtotal, fecha
-- Editar/eliminar movimientos con `editable: true` (últimas 24 h)
+- Editar/eliminar movimientos con `editable: true` (solo secretaria)
 
 ### Consulta de Caja (secretaria y escribano)
 
-- Misma selección de cajas
-- Saldo actual e historial
+- Desplegable de **una** caja + botón **Consulta** (igual que el wireframe `consulta_de_caja.drawio`)
+- Debajo: sección **Ver en conjunto con otras cajas** (`CajasAdicionalesSelector` con `summary` distinto; Registro sigue diciendo «Registrar también en otras cajas»)
+- **Sin casillas**: valor de caja + historial paginado (20), mismas llamadas `GET .../saldo` y `GET .../movimientos`
+- **Con casillas**: `Promise.all` de saldos (principal + marcadas). Si **cualquiera** falla, se descarta el intento (error, sin paneles). Arriba de las solapas se muestra **Valor en conjunto** (suma de los `saldo_actual` de ese intento). Solapas `CajaConsultaSolapa` **cerradas**; primera = caja del desplegable; resto en orden de catálogo. Historial lazy al expandir; paginación independiente
 - Sin acciones de escritura para escribano
 
 ### Plazos Fijos (secretaria)
@@ -179,6 +192,6 @@ Tests de páginas y componentes con mocks de API.
 | Problema | Causa | Solución |
 |----------|-------|----------|
 | CORS en local | `VITE_API_BASE_URL` apunta al API sin CORS | Dejar vacío y usar proxy Vite |
-| 401 tras login | Token expirado (8 h) | Volver a `/login` |
+| 401 tras login | Token expirado (8 h) o clave cambiada | Volver a `/login` |
 | "Verifique sus credenciales" genérico | Cualquier error HTTP en login | Revisar `/api/health` y logs del backend |
 | Cambios no visibles en Docker | Imagen cacheada | `docker compose build frontend` |
