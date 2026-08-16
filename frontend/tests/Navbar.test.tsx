@@ -42,6 +42,22 @@ describe("Navbar", () => {
     expect(screen.getByRole("link", { name: /configuración/i })).toBeInTheDocument();
   });
 
+  it("closes the password panel from the mobile backdrop control", () => {
+    render(
+      <MemoryRouter>
+        <Navbar />
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "admin" }));
+    expect(screen.getByText(/cambiar contraseña/i)).toBeInTheDocument();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: /cerrar cambio de contraseña/i }),
+    );
+    expect(screen.queryByText(/cambiar contraseña/i)).not.toBeInTheDocument();
+  });
+
   it("places Configuración between username and Salir", () => {
     render(
       <MemoryRouter>
@@ -110,5 +126,86 @@ describe("Navbar", () => {
       );
     });
     expect(screen.queryByText(/cambiar contraseña/i)).not.toBeInTheDocument();
+  });
+
+  it("exposes the app name on the header landmark", () => {
+    render(
+      <MemoryRouter>
+        <Navbar />
+      </MemoryRouter>,
+    );
+
+    expect(
+      screen.getByRole("banner", { name: "Escribanía Barat" }),
+    ).toBeInTheDocument();
+  });
+
+  it("toggles the compact menu and lists the same destinations as desktop for secretaria", () => {
+    render(
+      <MemoryRouter>
+        <Navbar />
+      </MemoryRouter>,
+    );
+
+    const toggle = screen.getByRole("button", { name: "Menú" });
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+
+    fireEvent.click(toggle);
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+
+    const labels = Array.from(
+      document.querySelectorAll(
+        ".navbar__links a, .navbar__user a, .navbar__logout",
+      ),
+    ).map((el) => el.textContent?.trim());
+    expect(labels).toEqual([
+      "Registro",
+      "Plazos fijos",
+      "Consulta",
+      "Consulta plazos fijos",
+      "Impresión",
+      "Configuración",
+      "Salir",
+    ]);
+  });
+
+  it("lists the same compact-menu destinations as desktop for escribano", () => {
+    authState.rol = "escribano";
+    authState.username = "escribano";
+
+    render(
+      <MemoryRouter>
+        <Navbar />
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Menú" }));
+
+    const labels = Array.from(
+      document.querySelectorAll(
+        ".navbar__links a, .navbar__user a, .navbar__logout",
+      ),
+    ).map((el) => el.textContent?.trim());
+    expect(labels).toEqual([
+      "Consulta",
+      "Consulta plazos fijos",
+      "Impresión",
+      "Salir",
+    ]);
+  });
+
+  it("closes the compact menu when a destination is chosen", () => {
+    render(
+      <MemoryRouter initialEntries={["/registro"]}>
+        <Navbar />
+      </MemoryRouter>,
+    );
+
+    const toggle = screen.getByRole("button", { name: "Menú" });
+    fireEvent.click(toggle);
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+
+    fireEvent.click(screen.getByRole("link", { name: /^consulta$/i }));
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
   });
 });

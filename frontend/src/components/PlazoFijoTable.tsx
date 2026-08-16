@@ -64,11 +64,15 @@ export default function PlazoFijoTable({
             key={plazoFijo.id}
             className={plazoFijo.vencido ? "plazo-fijo-row--vencido" : undefined}
           >
-            <td>{plazoFijo.monto_ingresado}</td>
-            <td>{formatFechaVencimiento(plazoFijo.fecha_vencimiento)}</td>
-            <td>{plazoFijo.monto_a_vencimiento}</td>
+            <td data-label="Monto ingresado">{plazoFijo.monto_ingresado}</td>
+            <td data-label="Fecha de vencimiento">
+              {formatFechaVencimiento(plazoFijo.fecha_vencimiento)}
+            </td>
+            <td data-label="Monto a vencimiento">
+              {plazoFijo.monto_a_vencimiento}
+            </td>
             {showActions ? (
-              <td className="movimiento-table-actions">
+              <td className="movimiento-table-actions" data-label="Acciones">
                 <div className="movimiento-table-actions-inner">
                   {onEdit ? (
                     <button

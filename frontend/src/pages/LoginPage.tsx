@@ -125,7 +125,7 @@ export default function LoginPage() {
 
           <button
             type="submit"
-            className="button button--primary"
+            className="button button--primary login-card__submit"
             disabled={submitting}
           >
             {submitting ? "Ingresando…" : "Ingresar"}
@@ -204,7 +204,7 @@ export default function LoginPage() {
           <div className="login-card__actions">
             <button
               type="submit"
-              className="button button--primary"
+              className="button button--primary login-card__submit"
               disabled={submitting}
             >
               {submitting ? "Guardando…" : "Guardar contraseña"}

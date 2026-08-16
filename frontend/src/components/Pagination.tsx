@@ -19,7 +19,7 @@ export default function Pagination({
     <nav className="pagination" aria-label="Paginación de movimientos">
       <button
         type="button"
-        className="button button--secondary"
+        className="button button--secondary pagination__control"
         disabled={disabled || page <= 1}
         onClick={() => onPageChange(page - 1)}
       >
@@ -30,7 +30,7 @@ export default function Pagination({
       </span>
       <button
         type="button"
-        className="button button--secondary"
+        className="button button--secondary pagination__control"
         disabled={disabled || page >= totalPages}
         onClick={() => onPageChange(page + 1)}
       >

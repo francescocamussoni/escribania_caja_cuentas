@@ -118,14 +118,18 @@ export default function ConsultaPlazosFijosPage() {
   const isBusy = loadingCajas || loadingConsulta;
 
   return (
-    <>
-      <header className="page-header">
+    <div className="page-stack">
+      <header className="page-header page-block" data-block="titulo">
         <h1>Consulta plazos fijos</h1>
       </header>
 
-      {error ? <p className="form-error">{error}</p> : null}
+      {error ? (
+        <p className="form-error page-block" data-block="error">
+          {error}
+        </p>
+      ) : null}
 
-      <div className="consulta-controls">
+      <div className="consulta-controls page-block" data-block="controles">
         <CajaSelector
           cajas={cajas}
           selectedCajaId={selectedCajaId}
@@ -144,24 +148,30 @@ export default function ConsultaPlazosFijosPage() {
 
       {hasConsulted ? (
         <>
-          <PlazosFijosResumenPanel
-            totalMontoIngresado={resumen?.total_monto_ingresado_activos ?? null}
-            totalMontoAVencimiento={
-              resumen?.total_monto_a_vencimiento_activos ?? null
-            }
-            loading={loadingConsulta && !resumen}
-          />
+          <div className="page-block" data-block="resumen">
+            <PlazosFijosResumenPanel
+              totalMontoIngresado={resumen?.total_monto_ingresado_activos ?? null}
+              totalMontoAVencimiento={
+                resumen?.total_monto_a_vencimiento_activos ?? null
+              }
+              loading={loadingConsulta && !resumen}
+            />
+          </div>
 
-          <PlazoFijoTable plazosFijos={plazosFijos} />
+          <div className="page-block" data-block="listado">
+            <PlazoFijoTable plazosFijos={plazosFijos} />
+          </div>
 
-          <Pagination
-            page={page}
-            totalPages={totalPages}
-            onPageChange={handlePageChange}
-            disabled={loadingConsulta}
-          />
+          <div className="page-block" data-block="paginacion">
+            <Pagination
+              page={page}
+              totalPages={totalPages}
+              onPageChange={handlePageChange}
+              disabled={loadingConsulta}
+            />
+          </div>
         </>
       ) : null}
-    </>
+    </div>
   );
 }

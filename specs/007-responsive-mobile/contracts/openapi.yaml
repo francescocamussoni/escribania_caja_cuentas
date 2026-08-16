@@ -1,0 +1,13 @@
+openapi: 3.0.0
+info:
+  title: Escribanía Cajas — 007 Responsive Mobile
+  version: "0.0.0"
+  description: |
+    Feature 007 no modifica la API. Este documento existe para el artefacto
+    de /spec-kitti.plan. Consumir el OpenAPI de aplicación existente para
+    operaciones de negocio.
+servers:
+  - url: /
+    description: Sin rutas nuevas
+paths: {}
+components: {}

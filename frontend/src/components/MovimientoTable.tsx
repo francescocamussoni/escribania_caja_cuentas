@@ -50,8 +50,9 @@ export default function MovimientoTable({
         ) : null}
         {movimientos.map((movimiento) => (
           <tr key={movimiento.id}>
-            <td>{movimiento.descripcion}</td>
+            <td data-label="Descripción">{movimiento.descripcion}</td>
             <td
+              data-label="Monto"
               className={
                 movimiento.tipo === "entrada"
                   ? "movimiento-entrada"
@@ -61,10 +62,10 @@ export default function MovimientoTable({
               {movimiento.tipo === "salida" ? "-" : ""}
               {movimiento.monto}
             </td>
-            <td>{movimiento.subtotal}</td>
-            <td>{formatFecha(movimiento.fecha)}</td>
+            <td data-label="Subtotal">{movimiento.subtotal}</td>
+            <td data-label="Fecha">{formatFecha(movimiento.fecha)}</td>
             {showActions ? (
-              <td className="movimiento-table-actions">
+              <td className="movimiento-table-actions" data-label="Acciones">
                 <div className="movimiento-table-actions-inner">
                   {movimiento.editable && onEdit ? (
                     <button

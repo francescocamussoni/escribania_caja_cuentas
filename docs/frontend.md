@@ -67,6 +67,8 @@ Guards en `App.tsx`:
 
 Navbar (`Navbar.tsx`) muestra links operativos según rol. A la derecha, en este orden: **nombre de usuario** (abre el panel de cambio de clave), **Configuración** (solo secretaria) y **Salir**.
 
+En **viewport &lt; 768px** se oculta el título «Escribanía Barat» y la barra queda en una sola fila: **Menú** · usuario · Configuración (secretaria) · Salir. El botón **Menú** compacta los links operativos en un panel (`aria-expanded`). Al tocar el usuario, el cambio de contraseña se abre a ancho de pantalla (etiquetas completas); un fondo oscurece el contenido. Al elegir un destino el panel de navegación se cierra. En escritorio el título y los links en fila se mantienen.
+
 | Link | Roles |
 |------|-------|
 | Registro | secretaria |
@@ -75,6 +77,18 @@ Navbar (`Navbar.tsx`) muestra links operativos según rol. A la derecha, en este
 | Consulta plazos fijos | secretaria, escribano |
 | Impresión | secretaria, escribano |
 | Configuración (junto a Salir) | secretaria |
+
+## Layout responsive (móvil)
+
+Breakpoint canónico: `@media screen and (max-width: 768px)` en `index.css` (no aplica a impresión).
+
+- Shell sin scroll horizontal de página; textos largos con wrap (sin recorte).
+- Formularios y chrome (headers, consulta, paginación, impresión, configuración) en columna; controles táctiles ~44px.
+- Listados (`.movimiento-table`): cada fila es un bloque apilado; etiquetas vía `data-label` en el mismo orden que las columnas de PC (Descripción → Monto → Subtotal → Fecha → Acciones cuando hay edición). El estado vacío no se parte en campos.
+- El orden de bloques de cada pantalla coincide con escritorio (`data-block` / `page-stack`).
+- Impresión: el formulario de pantalla se apila; el PDF generado no usa el layout de cards móviles.
+
+Contrato: `specs/007-responsive-mobile/contracts/ui-presentation.yaml`. Recorrido: `specs/007-responsive-mobile/quickstart.md`.
 
 ## Autenticación en el cliente
 
@@ -198,7 +212,7 @@ make test-frontend
 cd frontend && npm test
 ```
 
-Tests de páginas y componentes con mocks de API.
+Tests de páginas y componentes con mocks de API. Incluye `Navbar.test.tsx` (menú compacto y destinos por rol) y `listadoStackedFields.test.tsx` (orden de `data-label` en listados).
 
 ## Troubleshooting
 

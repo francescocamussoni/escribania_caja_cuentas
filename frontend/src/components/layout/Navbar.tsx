@@ -18,6 +18,7 @@ const links = [
 export function Navbar() {
   const { rol, username, logout, changePassword } = useAuth();
   const navigate = useNavigate();
+  const [navOpen, setNavOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
@@ -32,6 +33,10 @@ export function Navbar() {
   function handleLogout() {
     logout();
     navigate("/login", { replace: true });
+  }
+
+  function closeNav() {
+    setNavOpen(false);
   }
 
   function closeMenu() {
@@ -65,10 +70,34 @@ export function Navbar() {
     }
   }
 
+  const navbarClass = [
+    "navbar",
+    navOpen ? "navbar--nav-open" : "",
+    menuOpen ? "navbar--password-open" : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+
   return (
-    <header className="navbar">
+    <header className={navbarClass} aria-label="Escribanía Barat">
       <div className="navbar__brand">Escribanía Barat</div>
-      <nav className="navbar__links" aria-label="Navegación principal">
+      <button
+        type="button"
+        className="navbar__toggle"
+        aria-expanded={navOpen}
+        aria-controls="navbar-links"
+        onClick={() => {
+          setNavOpen((open) => !open);
+          setMenuOpen(false);
+        }}
+      >
+        Menú
+      </button>
+      <nav
+        id="navbar-links"
+        className="navbar__links"
+        aria-label="Navegación principal"
+      >
         {visibleLinks.map((link) => (
           <NavLink
             key={link.to}
@@ -76,6 +105,7 @@ export function Navbar() {
             className={({ isActive }) =>
               isActive ? "navbar__link navbar__link--active" : "navbar__link"
             }
+            onClick={closeNav}
           >
             {link.label}
           </NavLink>
@@ -89,7 +119,10 @@ export function Navbar() {
               className="navbar__username"
               aria-expanded={menuOpen}
               aria-haspopup="true"
-              onClick={() => setMenuOpen((open) => !open)}
+              onClick={() => {
+                setMenuOpen((open) => !open);
+                setNavOpen(false);
+              }}
             >
               {username}
             </button>
@@ -165,6 +198,14 @@ export function Navbar() {
           Salir
         </button>
       </div>
+      {menuOpen ? (
+        <button
+          type="button"
+          className="navbar__password-backdrop"
+          aria-label="Cerrar cambio de contraseña"
+          onClick={closeMenu}
+        />
+      ) : null}
     </header>
   );
 }

@@ -201,36 +201,44 @@ export default function RegistroCajaPage() {
   }
 
   return (
-    <>
-      <header className="page-header">
+    <div className="page-stack">
+      <header className="page-header page-block" data-block="titulo">
         <h1>Registro de caja</h1>
       </header>
 
-      {error ? <p className="form-error">{error}</p> : null}
+      {error ? (
+        <p className="form-error page-block" data-block="error">
+          {error}
+        </p>
+      ) : null}
 
-      <CajaSelector
-        cajas={cajas}
-        selectedCajaId={selectedCajaId}
-        onChange={handleCajaChange}
-        disabled={loading}
-      />
+      <div className="page-block" data-block="selector">
+        <CajaSelector
+          cajas={cajas}
+          selectedCajaId={selectedCajaId}
+          onChange={handleCajaChange}
+          disabled={loading}
+        />
+      </div>
 
-      <section className="saldo-panel" aria-live="polite">
+      <section className="saldo-panel page-block" data-block="saldo" aria-live="polite">
         <h2>Valor de caja</h2>
         <p className="saldo-valor">
           {saldo ? `$ ${saldo.saldo_actual}` : loading ? "Cargando…" : "—"}
         </p>
       </section>
 
-      <MovimientoForm
-        cajas={cajas}
-        activeCajaId={selectedCajaId}
-        onSubmit={handleCreateMovimiento}
-        disabled={loading}
-      />
+      <div className="page-block" data-block="formulario">
+        <MovimientoForm
+          cajas={cajas}
+          activeCajaId={selectedCajaId}
+          onSubmit={handleCreateMovimiento}
+          disabled={loading}
+        />
+      </div>
 
       {editingMovimiento ? (
-        <section className="movimiento-edit-panel">
+        <section className="movimiento-edit-panel page-block" data-block="edicion">
           <h2>Editar movimiento</h2>
           <form onSubmit={handleSaveEdit}>
             <label className="field">
@@ -294,18 +302,22 @@ export default function RegistroCajaPage() {
         </section>
       ) : null}
 
-      <MovimientoTable
-        movimientos={movimientos}
-        onEdit={handleStartEdit}
-        onDelete={handleDelete}
-      />
+      <div className="page-block" data-block="historial">
+        <MovimientoTable
+          movimientos={movimientos}
+          onEdit={handleStartEdit}
+          onDelete={handleDelete}
+        />
+      </div>
 
-      <Pagination
-        page={page}
-        totalPages={totalPages}
-        onPageChange={handlePageChange}
-        disabled={loading}
-      />
-    </>
+      <div className="page-block" data-block="paginacion">
+        <Pagination
+          page={page}
+          totalPages={totalPages}
+          onPageChange={handlePageChange}
+          disabled={loading}
+        />
+      </div>
+    </div>
   );
 }

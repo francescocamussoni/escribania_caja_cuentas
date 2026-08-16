@@ -1,0 +1,74 @@
+# UI presentation contract — 007-responsive-mobile
+# Not an HTTP API. Honored by frontend layout and Hybrid unit tests.
+
+breakpoint:
+  max_width_px: 768
+  media: screen
+  note: Do not apply stacked layout to print media.
+
+page_overflow:
+  horizontal_page_scroll: forbidden
+  long_text: wrap_complete
+  truncation: forbidden
+  extra_action_to_read_full_text: forbidden
+
+navigation:
+  desktop: always_visible_link_row
+  mobile: compact_button_plus_panel
+  destinations_must_match_desktop_for_role: true
+  roles:
+    secretaria:
+      - Registro
+      - Plazos fijos
+      - Consulta
+      - Consulta plazos fijos
+      - Impresión
+      - Configuración
+      - Salir
+    escribano:
+      - Consulta
+      - Consulta plazos fijos
+      - Impresión
+      - Salir
+
+stacked_lists:
+  empty_state: single_message_not_field_blocks
+  actions_position: after_fields
+  tables:
+    movimientos:
+      component: MovimientoTable
+      field_order:
+        - Descripción
+        - Monto
+        - Subtotal
+        - Fecha
+        - Acciones  # only when edit/delete callbacks exist
+    consulta_caja_inline:
+      component: ConsultaCajaPage table
+      field_order:
+        - Descripción
+        - Monto
+        - Subtotal
+        - Fecha
+    plazos_fijos:
+      component: PlazoFijoTable
+      field_order:
+        - Monto ingresado
+        - Fecha de vencimiento
+        - Monto a vencimiento
+        - Acciones  # only when edit/delete callbacks exist
+    configuracion_cajas:
+      component: ConfiguracionCajasPage table
+      field_order:
+        - Caja
+        - Estado
+        - Acciones  # archive/unarchive when the row is operable
+
+screens_in_scope:
+  - /login
+  - /registro
+  - /consulta
+  - /plazos-fijos
+  - /consulta-plazos-fijos
+  - /impresion
+  - /configuracion

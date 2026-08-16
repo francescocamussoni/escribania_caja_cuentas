@@ -199,14 +199,18 @@ export default function ConsultaCajaPage() {
   const isBusy = loadingCajas || loadingConsulta;
 
   return (
-    <>
-      <header className="page-header">
+    <div className="page-stack">
+      <header className="page-header page-block" data-block="titulo">
         <h1>Consulta de caja</h1>
       </header>
 
-      {error ? <p className="form-error">{error}</p> : null}
+      {error ? (
+        <p className="form-error page-block" data-block="error">
+          {error}
+        </p>
+      ) : null}
 
-      <div className="consulta-controls consulta-controls--stack">
+      <div className="consulta-controls consulta-controls--stack page-block" data-block="controles">
         <div className="consulta-controls__row">
           <CajaSelector
             cajas={cajas}
@@ -245,7 +249,7 @@ export default function ConsultaCajaPage() {
       </div>
 
       {saldoGeneral ? (
-        <section className="consulta-conjunto" aria-live="polite">
+        <section className="consulta-conjunto page-block" data-block="saldo" aria-live="polite">
           <section className="saldo-panel">
             <h2>Subtotal general</h2>
             <p className="saldo-valor">$ {saldoGeneral.subtotal_general}</p>
@@ -260,8 +264,8 @@ export default function ConsultaCajaPage() {
             <tbody>
               {saldoGeneral.cajas.map((item) => (
                 <tr key={item.caja.id}>
-                  <td>{item.caja.nombre}</td>
-                  <td>$ {item.saldo_actual}</td>
+                  <td data-label="Caja">{item.caja.nombre}</td>
+                  <td data-label="Subtotal">$ {item.saldo_actual}</td>
                 </tr>
               ))}
             </tbody>
@@ -270,7 +274,7 @@ export default function ConsultaCajaPage() {
       ) : null}
 
       {hasConsulted && jointMode ? (
-        <section className="consulta-conjunto" aria-live="polite">
+        <section className="consulta-conjunto page-block" data-block="solapas" aria-live="polite">
           <section className="saldo-panel">
             <h2>Valor en conjunto</h2>
             <p className="saldo-valor">$ {sumSaldoActual(saldosConjunto)}</p>
@@ -287,23 +291,27 @@ export default function ConsultaCajaPage() {
 
       {hasConsulted && !jointMode ? (
         <>
-          <section className="saldo-panel" aria-live="polite">
+          <section className="saldo-panel page-block" data-block="saldo" aria-live="polite">
             <h2>Valor de caja</h2>
             <p className="saldo-valor">
               {saldo ? `$ ${saldo.saldo_actual}` : loadingConsulta ? "Cargando…" : "—"}
             </p>
           </section>
 
-          <MovimientoTable movimientos={movimientos} />
+          <div className="page-block" data-block="historial">
+            <MovimientoTable movimientos={movimientos} />
+          </div>
 
-          <Pagination
-            page={page}
-            totalPages={totalPages}
-            onPageChange={handlePageChange}
-            disabled={loadingConsulta}
-          />
+          <div className="page-block" data-block="paginacion">
+            <Pagination
+              page={page}
+              totalPages={totalPages}
+              onPageChange={handlePageChange}
+              disabled={loadingConsulta}
+            />
+          </div>
         </>
       ) : null}
-    </>
+    </div>
   );
 }

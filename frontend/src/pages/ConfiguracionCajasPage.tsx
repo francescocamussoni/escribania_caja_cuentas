@@ -94,14 +94,20 @@ export default function ConfiguracionCajasPage() {
   }
 
   return (
-    <section className="page">
-      <h1>Configuración</h1>
-      <p>
+    <section className="page page-stack">
+      <h1 className="page-block" data-block="titulo">
+        Configuración
+      </h1>
+      <p className="page-block" data-block="descripcion">
         Alta y archivo de cajas. Las archivadas conservan su historial y se
         pueden desarchivar para volver a operar.
       </p>
 
-      <form className="form-card config-cajas-form" onSubmit={handleCreate}>
+      <form
+        className="form-card config-cajas-form page-block"
+        data-block="alta"
+        onSubmit={handleCreate}
+      >
         <div className="config-cajas-form__row">
           <label className="field">
             Nombre de la caja
@@ -126,24 +132,24 @@ export default function ConfiguracionCajasPage() {
       {error ? <p className="form-error">{error}</p> : null}
       {loading ? <p>Cargando cajas…</p> : null}
 
-      <table className="movimiento-table">
+      <table className="movimiento-table page-block" data-block="listado">
         <thead>
           <tr>
             <th>Caja</th>
             <th>Estado</th>
-            <th></th>
+            <th>Acciones</th>
           </tr>
         </thead>
         <tbody>
           {cajas.map((caja) => (
             <tr key={caja.id}>
-              <td>{caja.nombre}</td>
-              <td>{caja.estado ?? "activa"}</td>
-              <td>
+              <td data-label="Caja">{caja.nombre}</td>
+              <td data-label="Estado">{caja.estado ?? "activa"}</td>
+              <td data-label="Acciones">
                 {caja.estado !== "archivada" ? (
                   <button
                     type="button"
-                    className="button button--secondary"
+                    className="button button--secondary config-cajas-row-action"
                     disabled={submitting}
                     onClick={() => void handleArchive(caja.id)}
                   >
@@ -152,7 +158,7 @@ export default function ConfiguracionCajasPage() {
                 ) : (
                   <button
                     type="button"
-                    className="button button--secondary"
+                    className="button button--secondary config-cajas-row-action"
                     disabled={submitting}
                     onClick={() => void handleUnarchive(caja.id)}
                   >

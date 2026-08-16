@@ -150,14 +150,18 @@ export default function ImpresionPage() {
   const isBusy = loadingCajas || generating;
 
   return (
-    <>
-      <header className="page-header">
+    <div className="page-stack">
+      <header className="page-header page-block" data-block="titulo">
         <h1>Impresión</h1>
       </header>
 
-      {error ? <p className="form-error">{error}</p> : null}
+      {error ? (
+        <p className="form-error page-block" data-block="error">
+          {error}
+        </p>
+      ) : null}
 
-      <div className="consulta-controls impresion-form">
+      <div className="consulta-controls impresion-form page-block" data-block="filtros">
         <fieldset className="impresion-fieldset" disabled={isBusy}>
           <legend>Tipo de informe</legend>
           <label className="impresion-radio">
@@ -283,6 +287,7 @@ export default function ImpresionPage() {
         <button
           type="button"
           className="button button--primary"
+          data-block="generar"
           disabled={isBusy || !selectedCajaId}
           onClick={handleGenerarInforme}
         >
@@ -293,6 +298,6 @@ export default function ImpresionPage() {
               : "Generar informe de caja"}
         </button>
       </div>
-    </>
+    </div>
   );
 }

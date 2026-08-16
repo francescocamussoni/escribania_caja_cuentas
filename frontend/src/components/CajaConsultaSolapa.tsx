@@ -53,21 +53,27 @@ export default function CajaConsultaSolapa({
   return (
     <details className="caja-consulta-solapa" onToggle={handleToggle}>
       <summary className="caja-consulta-solapa__summary">
-        <span>{caja.nombre}</span>
-        <span className="saldo-valor">$ {saldoActual}</span>
+        <span data-block="nombre">{caja.nombre}</span>
+        <span className="saldo-valor" data-block="saldo">
+          $ {saldoActual}
+        </span>
       </summary>
       <div className="caja-consulta-solapa__body">
         {error ? <p className="form-error">{error}</p> : null}
         {loading && !loaded ? <p>Cargando…</p> : null}
         {loaded ? (
           <>
-            <MovimientoTable movimientos={movimientos} />
-            <Pagination
-              page={page}
-              totalPages={totalPages}
-              onPageChange={loadPage}
-              disabled={loading}
-            />
+            <div className="page-block" data-block="historial">
+              <MovimientoTable movimientos={movimientos} />
+            </div>
+            <div className="page-block" data-block="paginacion">
+              <Pagination
+                page={page}
+                totalPages={totalPages}
+                onPageChange={loadPage}
+                disabled={loading}
+              />
+            </div>
           </>
         ) : null}
       </div>

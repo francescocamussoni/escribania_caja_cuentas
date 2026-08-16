@@ -197,30 +197,40 @@ export default function PlazosFijosPage() {
   }
 
   return (
-    <>
-      <header className="page-header">
+    <div className="page-stack">
+      <header className="page-header page-block" data-block="titulo">
         <h1>Plazos fijos</h1>
       </header>
 
-      {error ? <p className="form-error">{error}</p> : null}
+      {error ? (
+        <p className="form-error page-block" data-block="error">
+          {error}
+        </p>
+      ) : null}
 
-      <CajaSelector
-        cajas={cajas}
-        selectedCajaId={selectedCajaId}
-        onChange={handleCajaChange}
-        disabled={loading}
-      />
+      <div className="page-block" data-block="selector">
+        <CajaSelector
+          cajas={cajas}
+          selectedCajaId={selectedCajaId}
+          onChange={handleCajaChange}
+          disabled={loading}
+        />
+      </div>
 
-      <PlazosFijosResumenPanel
-        totalMontoIngresado={resumen?.total_monto_ingresado_activos ?? null}
-        totalMontoAVencimiento={resumen?.total_monto_a_vencimiento_activos ?? null}
-        loading={loading && !resumen}
-      />
+      <div className="page-block" data-block="resumen">
+        <PlazosFijosResumenPanel
+          totalMontoIngresado={resumen?.total_monto_ingresado_activos ?? null}
+          totalMontoAVencimiento={resumen?.total_monto_a_vencimiento_activos ?? null}
+          loading={loading && !resumen}
+        />
+      </div>
 
-      <PlazoFijoForm onSubmit={handleCreatePlazoFijo} disabled={loading} />
+      <div className="page-block" data-block="formulario">
+        <PlazoFijoForm onSubmit={handleCreatePlazoFijo} disabled={loading} />
+      </div>
 
       {editingPlazoFijo ? (
-        <section className="movimiento-edit-panel plazo-fijo-edit-panel">
+        <section className="movimiento-edit-panel plazo-fijo-edit-panel page-block" data-block="edicion">
           <h2>Editar plazo fijo</h2>
           <form onSubmit={handleSaveEdit}>
             <label className="field">
@@ -282,18 +292,22 @@ export default function PlazosFijosPage() {
         </section>
       ) : null}
 
-      <PlazoFijoTable
-        plazosFijos={plazosFijos}
-        onEdit={handleStartEdit}
-        onDelete={handleDelete}
-      />
+      <div className="page-block" data-block="listado">
+        <PlazoFijoTable
+          plazosFijos={plazosFijos}
+          onEdit={handleStartEdit}
+          onDelete={handleDelete}
+        />
+      </div>
 
-      <Pagination
-        page={page}
-        totalPages={totalPages}
-        onPageChange={handlePageChange}
-        disabled={loading}
-      />
-    </>
+      <div className="page-block" data-block="paginacion">
+        <Pagination
+          page={page}
+          totalPages={totalPages}
+          onPageChange={handlePageChange}
+          disabled={loading}
+        />
+      </div>
+    </div>
   );
 }
