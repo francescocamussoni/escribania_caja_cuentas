@@ -1,0 +1,428 @@
+openapi: 3.0.3
+info:
+  title: Registro de Cajas — Moneda ARS/USD
+  version: 1.0.0
+  description: |
+    Contrato delta de 008-caja-monedas. Extiende movimientos y saldos.
+    No redefine auth. Campos de moneda son obligatorios en lecturas.
+    Breaking: CajaSaldoResponse ya no usa saldo_actual; saldo-general ya no usa subtotal_general único.
+
+servers:
+  - url: http://localhost:8000
+    description: Desarrollo local
+
+tags:
+  - name: cajas
+  - name: movimientos
+
+paths:
+  /api/v1/cajas/{cajaId}/saldo:
+    get:
+      tags: [cajas]
+      summary: Saldos ARS y USD de una caja (no siguen filtros de listado)
+      operationId: getCajaSaldo
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/CajaId'
+      responses:
+        '200':
+          description: Saldos separados por moneda
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CajaSaldoResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/cajas/saldo-general:
+    get:
+      tags: [cajas]
+      summary: Saldos de cajas activas, ARS y USD por separado (secretaria)
+      operationId: getCajasSaldoGeneral
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Totales por moneda, sin mezclar
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CajaSaldoGeneralResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /api/v1/cajas/{cajaId}/movimientos:
+    get:
+      tags: [movimientos]
+      summary: Listar movimientos paginados con filtros opcionales
+      operationId: listMovimientos
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/CajaId'
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: page_size
+          in: query
+          schema:
+            type: integer
+            enum: [20]
+            default: 20
+        - name: moneda
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/Moneda'
+          description: Omite el parámetro para todas las monedas
+        - name: fecha_desde
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date
+          description: Inclusive, calendario America/Argentina/Buenos_Aires
+        - name: fecha_hasta
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date
+          description: Inclusive, calendario America/Argentina/Buenos_Aires
+      responses:
+        '200':
+          description: Página del conjunto filtrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedMovimientos'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    post:
+      tags: [movimientos]
+      summary: Registrar entrada o salida; par USD atómico si registrar_complementario
+      operationId: createMovimiento
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/CajaId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateMovimientoRequest'
+      responses:
+        '201':
+          description: Movimiento creado; complementario presente solo si el par se persistió
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MovimientoCreateResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/cajas/{cajaId}/movimientos/{movimientoId}:
+    patch:
+      tags: [movimientos]
+      summary: Editar movimiento (secretaria, 24h); moneda opcional
+      operationId: updateMovimiento
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/CajaId'
+        - $ref: '#/components/parameters/MovimientoId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateMovimientoRequest'
+      responses:
+        '200':
+          description: Actualizado; recálculo del o los streams de moneda
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Movimiento'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          description: Ventana de 24h expirada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    delete:
+      tags: [movimientos]
+      summary: Eliminar un movimiento (no cascada al par)
+      operationId: deleteMovimiento
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/CajaId'
+        - $ref: '#/components/parameters/MovimientoId'
+      responses:
+        '204':
+          description: Eliminado; recálculo del stream de esa moneda
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          description: Ventana de 24h expirada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  parameters:
+    CajaId:
+      name: cajaId
+      in: path
+      required: true
+      schema:
+        type: integer
+        minimum: 1
+    MovimientoId:
+      name: movimientoId
+      in: path
+      required: true
+      schema:
+        type: integer
+        minimum: 1
+
+  schemas:
+    Moneda:
+      type: string
+      enum: [ARS, USD]
+
+    Caja:
+      type: object
+      additionalProperties: false
+      required: [id, nombre, slug, estado]
+      properties:
+        id:
+          type: integer
+        nombre:
+          type: string
+        slug:
+          type: string
+        estado:
+          type: string
+          enum: [activa, archivada]
+
+    CajaSaldoResponse:
+      type: object
+      additionalProperties: false
+      required: [caja, saldo_ars, saldo_usd]
+      properties:
+        caja:
+          $ref: '#/components/schemas/Caja'
+        saldo_ars:
+          type: string
+          example: "12500.00"
+        saldo_usd:
+          type: string
+          example: "100.00"
+        ultimo_movimiento_at:
+          type: string
+          format: date-time
+          nullable: true
+
+    CajaSaldoResumenItem:
+      type: object
+      additionalProperties: false
+      required: [caja, saldo_ars, saldo_usd]
+      properties:
+        caja:
+          $ref: '#/components/schemas/Caja'
+        saldo_ars:
+          type: string
+        saldo_usd:
+          type: string
+
+    CajaSaldoGeneralResponse:
+      type: object
+      additionalProperties: false
+      required: [subtotal_general_ars, subtotal_general_usd, cajas_incluidas, cajas]
+      properties:
+        subtotal_general_ars:
+          type: string
+        subtotal_general_usd:
+          type: string
+        cajas_incluidas:
+          type: integer
+        cajas:
+          type: array
+          items:
+            $ref: '#/components/schemas/CajaSaldoResumenItem'
+
+    Movimiento:
+      type: object
+      additionalProperties: false
+      required: [id, descripcion, monto, moneda, tipo, subtotal, fecha, editable, caja]
+      properties:
+        id:
+          type: integer
+        descripcion:
+          type: string
+        monto:
+          type: string
+          example: "5000.00"
+        moneda:
+          $ref: '#/components/schemas/Moneda'
+        tipo:
+          type: string
+          enum: [entrada, salida]
+        subtotal:
+          type: string
+          description: Acumulado de esta caja en esta moneda
+        fecha:
+          type: string
+          format: date-time
+        editable:
+          type: boolean
+        caja:
+          $ref: '#/components/schemas/Caja'
+
+    MovimientoCreateResponse:
+      type: object
+      additionalProperties: false
+      required: [movimiento]
+      properties:
+        movimiento:
+          $ref: '#/components/schemas/Movimiento'
+        complementario:
+          allOf:
+            - $ref: '#/components/schemas/Movimiento'
+          nullable: true
+
+    CreateMovimientoRequest:
+      type: object
+      additionalProperties: false
+      required: [descripcion, monto, tipo]
+      properties:
+        descripcion:
+          type: string
+          minLength: 1
+          maxLength: 500
+        monto:
+          type: string
+          pattern: '^\d+(\.\d{1,2})?$'
+        tipo:
+          type: string
+          enum: [entrada, salida]
+        moneda:
+          $ref: '#/components/schemas/Moneda'
+          default: ARS
+        registrar_complementario:
+          type: boolean
+          default: false
+          description: Solo válido con moneda USD; persiste el par en una transacción
+
+    UpdateMovimientoRequest:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        descripcion:
+          type: string
+          minLength: 1
+          maxLength: 500
+        monto:
+          type: string
+          pattern: '^\d+(\.\d{1,2})?$'
+        tipo:
+          type: string
+          enum: [entrada, salida]
+        moneda:
+          $ref: '#/components/schemas/Moneda'
+
+    PaginatedMovimientos:
+      type: object
+      additionalProperties: false
+      required: [items, page, page_size, total_items, total_pages]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Movimiento'
+        page:
+          type: integer
+        page_size:
+          type: integer
+          enum: [20]
+        total_items:
+          type: integer
+        total_pages:
+          type: integer
+
+    ErrorResponse:
+      type: object
+      additionalProperties: false
+      required: [detail]
+      properties:
+        detail:
+          type: string
+
+  responses:
+    BadRequest:
+      description: Validación fallida
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Unauthorized:
+      description: No autenticado o token expirado
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Forbidden:
+      description: Rol sin permiso
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    NotFound:
+      description: Recurso no encontrado
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'

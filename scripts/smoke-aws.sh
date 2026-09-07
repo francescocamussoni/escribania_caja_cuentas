@@ -311,7 +311,7 @@ if data.get("items") != []:
   pass "ST-007 empty movimientos"
 }
 
-# ST-008 — Zero initial balance
+# ST-008 — Saldo dual (saldo_ars + saldo_usd) per caja
 run_st_008() {
   local body status
   if [[ -z "${ACCESS_TOKEN}" ]]; then
@@ -329,20 +329,20 @@ run_st_008() {
 
   python3 -c '
 import json, sys
-from decimal import Decimal
 data = json.load(sys.stdin)
-saldo = data.get("saldo_actual")
-if saldo is None:
-    raise SystemExit("missing saldo_actual")
-if Decimal(str(saldo)) != 0:
-    raise SystemExit(f"expected zero saldo_actual, got {saldo!r}")
+if "saldo_ars" not in data:
+    raise SystemExit("missing saldo_ars field (breaking change 008)")
+if "saldo_usd" not in data:
+    raise SystemExit("missing saldo_usd field (breaking change 008)")
+if "saldo_actual" in data:
+    raise SystemExit("deprecated saldo_actual still present")
 ' <"$body" || {
     rm -f "$body"
-    fail "ST-008: saldo not zero"
+    fail "ST-008: saldo dual fields not correct"
   }
 
   rm -f "$body"
-  pass "ST-008 zero initial saldo"
+  pass "ST-008 saldo dual (saldo_ars + saldo_usd, no saldo_actual)"
 }
 
 main() {

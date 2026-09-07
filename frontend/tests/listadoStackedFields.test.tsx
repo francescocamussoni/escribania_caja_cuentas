@@ -27,6 +27,7 @@ const movimiento: Movimiento = {
   descripcion: "Pago cliente con texto largo para envolver",
   monto: "5000.00",
   tipo: "entrada",
+  moneda: "ARS",
   subtotal: "5000.00",
   fecha: "2026-08-03T14:30:00-03:00",
   editable: true,
@@ -110,6 +111,61 @@ describe("listadoStackedFields", () => {
       "Monto a vencimiento",
       "Acciones",
     ]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// T028 — TDD component tests US3
+// Deben FALLAR hasta que T031 y T032 implementen las funcionalidades.
+// ---------------------------------------------------------------------------
+
+describe("listadoStackedFields — moneda en monto (T028)", () => {
+  it("shows the moneda label next to the monto for ARS", () => {
+    const movimientoARS: Movimiento = { ...movimiento, moneda: "ARS" };
+    render(<MovimientoTable movimientos={[movimientoARS]} />);
+
+    const montoCell = screen.getByText((_content, element) => {
+      return (
+        element?.getAttribute("data-label") === "Monto" &&
+        (element?.textContent?.includes("ARS") ?? false)
+      );
+    });
+    expect(montoCell).toBeInTheDocument();
+  });
+
+  it("shows the moneda label next to the monto for USD", () => {
+    const movimientoUSD: Movimiento = { ...movimiento, moneda: "USD" };
+    render(<MovimientoTable movimientos={[movimientoUSD]} />);
+
+    const montoCell = screen.getByText((_content, element) => {
+      return (
+        element?.getAttribute("data-label") === "Monto" &&
+        (element?.textContent?.includes("USD") ?? false)
+      );
+    });
+    expect(montoCell).toBeInTheDocument();
+  });
+
+  it("keeps entrada color class when moneda ARS is shown", () => {
+    const movimientoARS: Movimiento = { ...movimiento, tipo: "entrada", moneda: "ARS" };
+    const { container } = render(<MovimientoTable movimientos={[movimientoARS]} />);
+
+    const montoCell = container.querySelector(".movimiento-entrada");
+    expect(montoCell).not.toBeNull();
+    expect(montoCell?.textContent).toContain("ARS");
+  });
+
+  it("keeps salida color class when moneda USD is shown", () => {
+    const movimientoUSD: Movimiento = {
+      ...movimiento,
+      tipo: "salida",
+      moneda: "USD",
+    };
+    const { container } = render(<MovimientoTable movimientos={[movimientoUSD]} />);
+
+    const montoCell = container.querySelector(".movimiento-salida");
+    expect(montoCell).not.toBeNull();
+    expect(montoCell?.textContent).toContain("USD");
   });
 });
 

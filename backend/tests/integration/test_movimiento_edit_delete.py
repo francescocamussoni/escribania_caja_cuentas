@@ -40,14 +40,16 @@ async def _create_movimiento(
     monto: str,
     tipo: str,
     caja_id: int = 1,
+    moneda: str = "ARS",
 ) -> dict:
     response = await client.post(
         f"/api/v1/cajas/{caja_id}/movimientos",
-        json={"descripcion": descripcion, "monto": monto, "tipo": tipo},
+        json={"descripcion": descripcion, "monto": monto, "tipo": tipo, "moneda": moneda},
         headers=headers,
     )
     assert response.status_code == 201
-    return response.json()
+    # T012: response is now MovimientoCreateResponse {movimiento, complementario}
+    return response.json()["movimiento"]
 
 
 async def _list_movimientos(
@@ -338,3 +340,185 @@ async def test_escribano_delete_movimiento_returns_403(
     )
 
     assert response.status_code == 403
+
+
+# ---------------------------------------------------------------------------
+# T014 — Recalculation scoped to currency stream on PATCH/DELETE
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_patch_moneda_recalculates_both_streams(
+    client: AsyncClient,
+    secretaria_headers: dict[str, str],
+) -> None:
+    """
+    PATCH that changes moneda from ARS to USD must:
+    - Move the row into the USD stream (subtotal based on prior USD rows)
+    - Recalculate the ARS stream (which now has one fewer row)
+    """
+    suffix = uuid4().hex[:8]
+    caja_id = 8  # dedicated caja for this test
+
+    # Capture existing ARS and USD saldos before this test adds its rows.
+    saldo_resp = await client.get(
+        f"/api/v1/cajas/{caja_id}/saldo",
+        headers=secretaria_headers,
+    )
+    assert saldo_resp.status_code == 200
+    prior_saldo_ars = Decimal(saldo_resp.json()["saldo_ars"])
+    prior_saldo_usd = Decimal(saldo_resp.json()["saldo_usd"])
+
+    # Build ARS stream: prior_ars + 1000, then + 500
+    first_ars = await _create_movimiento(
+        client, secretaria_headers,
+        descripcion=f"ARS1 {suffix}", monto="1000.00", tipo="entrada",
+        caja_id=caja_id, moneda="ARS",
+    )
+    second_ars = await _create_movimiento(
+        client, secretaria_headers,
+        descripcion=f"ARS2 {suffix}", monto="500.00", tipo="entrada",
+        caja_id=caja_id, moneda="ARS",
+    )
+    # Build USD stream: prior_usd + 200
+    first_usd = await _create_movimiento(
+        client, secretaria_headers,
+        descripcion=f"USD1 {suffix}", monto="200.00", tipo="entrada",
+        caja_id=caja_id, moneda="USD",
+    )
+
+    assert Decimal(first_ars["subtotal"]) == prior_saldo_ars + Decimal("1000.00")
+    assert Decimal(second_ars["subtotal"]) == prior_saldo_ars + Decimal("1500.00")
+    assert Decimal(first_usd["subtotal"]) == prior_saldo_usd + Decimal("200.00")
+
+    # PATCH second_ars: change moneda ARS→USD
+    patch_resp = await client.patch(
+        f"/api/v1/cajas/{caja_id}/movimientos/{second_ars['id']}",
+        json={"moneda": "USD"},
+        headers=secretaria_headers,
+    )
+    assert patch_resp.status_code == 200
+    patched = patch_resp.json()
+    assert patched["moneda"] == "USD"
+
+    # ARS stream: second_ars removed → first_ars subtotal stays at prior_ars + 1000
+    after_first_ars = await _get_movimiento_by_id(
+        client, secretaria_headers, first_ars["id"], caja_id=caja_id
+    )
+    assert Decimal(after_first_ars["subtotal"]) == prior_saldo_ars + Decimal("1000.00"), (
+        f"ARS stream should be recalculated. Got: {after_first_ars['subtotal']}"
+    )
+
+    # The moved row must now have moneda=USD
+    patched_in_usd = await _get_movimiento_by_id(
+        client, secretaria_headers, second_ars["id"], caja_id=caja_id
+    )
+    assert patched_in_usd["moneda"] == "USD"
+
+    # Verify via saldo: moving a 500 entrada from ARS→USD adds 500 to saldo_usd
+    # and removes 500 from saldo_ars (which only had first_ars=1000 left after the move).
+    final_saldo_resp = await client.get(
+        f"/api/v1/cajas/{caja_id}/saldo", headers=secretaria_headers
+    )
+    assert final_saldo_resp.status_code == 200
+    final_saldo = final_saldo_resp.json()
+    expected_final_ars = prior_saldo_ars + Decimal("1000.00")   # only first_ars remains
+    expected_final_usd = prior_saldo_usd + Decimal("700.00")    # first_usd(200) + moved(500)
+    assert Decimal(final_saldo["saldo_ars"]) == expected_final_ars, (
+        f"saldo_ars after PATCH expected {expected_final_ars}, got {final_saldo['saldo_ars']}"
+    )
+    assert Decimal(final_saldo["saldo_usd"]) == expected_final_usd, (
+        f"saldo_usd after PATCH expected {expected_final_usd}, got {final_saldo['saldo_usd']}"
+    )
+
+
+@pytest.mark.asyncio
+async def test_patch_same_moneda_only_recalculates_one_stream(
+    client: AsyncClient,
+    secretaria_headers: dict[str, str],
+) -> None:
+    """PATCH that does NOT change moneda must only touch the single stream."""
+    suffix = uuid4().hex[:8]
+    caja_id = 9
+
+    # Capture prior saldos to compute expected values correctly
+    prior_resp = await client.get(
+        f"/api/v1/cajas/{caja_id}/saldo", headers=secretaria_headers
+    )
+    assert prior_resp.status_code == 200
+    prior_saldo_ars = Decimal(prior_resp.json()["saldo_ars"])
+
+    ars1 = await _create_movimiento(
+        client, secretaria_headers,
+        descripcion=f"ARS base {suffix}", monto="300.00", tipo="entrada",
+        caja_id=caja_id, moneda="ARS",
+    )
+    ars2 = await _create_movimiento(
+        client, secretaria_headers,
+        descripcion=f"ARS second {suffix}", monto="100.00", tipo="entrada",
+        caja_id=caja_id, moneda="ARS",
+    )
+    usd1 = await _create_movimiento(
+        client, secretaria_headers,
+        descripcion=f"USD only {suffix}", monto="50.00", tipo="entrada",
+        caja_id=caja_id, moneda="USD",
+    )
+
+    # Patch ars1 monto: 300 → 600 (no moneda change)
+    patch_resp = await client.patch(
+        f"/api/v1/cajas/{caja_id}/movimientos/{ars1['id']}",
+        json={"monto": "600.00"},
+        headers=secretaria_headers,
+    )
+    assert patch_resp.status_code == 200
+
+    # ARS stream recalculated: prior_ars + 600, then + 100 = prior_ars + 700
+    expected_ars2_subtotal = str(prior_saldo_ars + Decimal("700.00"))
+    after_ars2 = await _get_movimiento_by_id(
+        client, secretaria_headers, ars2["id"], caja_id=caja_id
+    )
+    assert after_ars2["subtotal"] == expected_ars2_subtotal, (
+        f"ARS stream recalculated: expected {expected_ars2_subtotal}, got {after_ars2['subtotal']}"
+    )
+
+    # USD stream must be untouched (usd1 subtotal is exactly what was returned at creation)
+    after_usd1 = await _get_movimiento_by_id(
+        client, secretaria_headers, usd1["id"], caja_id=caja_id
+    )
+    assert after_usd1["subtotal"] == usd1["subtotal"], (
+        f"USD stream should not be affected by ARS patch. Got: {after_usd1['subtotal']}"
+    )
+
+
+@pytest.mark.asyncio
+async def test_delete_ars_does_not_affect_usd_stream(
+    client: AsyncClient,
+    secretaria_headers: dict[str, str],
+) -> None:
+    """DELETE of an ARS row must leave the USD stream completely untouched."""
+    suffix = uuid4().hex[:8]
+    caja_id = 10
+
+    ars1 = await _create_movimiento(
+        client, secretaria_headers,
+        descripcion=f"ARS del {suffix}", monto="400.00", tipo="entrada",
+        caja_id=caja_id, moneda="ARS",
+    )
+    usd1 = await _create_movimiento(
+        client, secretaria_headers,
+        descripcion=f"USD keep {suffix}", monto="75.00", tipo="entrada",
+        caja_id=caja_id, moneda="USD",
+    )
+
+    delete_resp = await client.delete(
+        f"/api/v1/cajas/{caja_id}/movimientos/{ars1['id']}",
+        headers=secretaria_headers,
+    )
+    assert delete_resp.status_code == 204
+
+    after_usd1 = await _get_movimiento_by_id(
+        client, secretaria_headers, usd1["id"], caja_id=caja_id
+    )
+    # usd1 subtotal at creation time must remain unchanged after ARS delete
+    assert after_usd1["subtotal"] == usd1["subtotal"], (
+        f"USD stream should be untouched after ARS delete. Got: {after_usd1['subtotal']}"
+    )

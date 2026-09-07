@@ -28,6 +28,10 @@ class Movimiento(Base):
             "tipo IN ('entrada', 'salida')",
             name="ck_movimiento_tipo",
         ),
+        CheckConstraint(
+            "moneda IN ('ARS', 'USD')",
+            name="ck_movimiento_moneda",
+        ),
     )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
@@ -39,6 +43,7 @@ class Movimiento(Base):
     descripcion: Mapped[str] = mapped_column(String(500), nullable=False)
     monto: Mapped[Decimal] = mapped_column(Numeric(15, 2), nullable=False)
     tipo: Mapped[str] = mapped_column(String(10), nullable=False)
+    moneda: Mapped[str] = mapped_column(String(3), nullable=False, default="ARS")
     subtotal: Mapped[Decimal] = mapped_column(Numeric(15, 2), nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

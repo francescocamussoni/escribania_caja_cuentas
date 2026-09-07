@@ -12,6 +12,7 @@ import {
   type CajaSaldo,
   type CajaSaldoGeneral,
   type Movimiento,
+  type MovimientoFiltros,
   type PaginatedMovimientos,
 } from "../services/api";
 
@@ -26,10 +27,10 @@ function jointCajaIds(
   return [principalId, ...additional];
 }
 
-function sumSaldoActual(saldos: CajaSaldo[]): string {
+function sumSaldoArs(saldos: CajaSaldo[]): string {
   const totalCents = saldos.reduce((acc, item) => {
-    const negative = item.saldo_actual.trim().startsWith("-");
-    const [whole = "0", fraction = ""] = item.saldo_actual
+    const negative = item.saldo_ars.trim().startsWith("-");
+    const [whole = "0", fraction = ""] = item.saldo_ars
       .trim()
       .replace("-", "")
       .split(".");
@@ -61,11 +62,29 @@ export default function ConsultaCajaPage() {
   const [saldoGeneral, setSaldoGeneral] = useState<CajaSaldoGeneral | null>(null);
   const adicionalesDetailsRef = useRef<HTMLDetailsElement>(null);
 
-  const loadCajaData = useCallback(async (cajaId: number, currentPage: number) => {
+  // ── Filtros US3 ──────────────────────────────────────────────────────────
+  const [filtroMoneda, setFiltroMoneda] = useState<"ARS" | "USD" | "">("");
+  const [filtroFechaDesde, setFiltroFechaDesde] = useState("");
+  const [filtroFechaHasta, setFiltroFechaHasta] = useState("");
+
+  const buildFiltros = useCallback((): MovimientoFiltros => {
+    const f: MovimientoFiltros = {};
+    if (filtroMoneda) f.moneda = filtroMoneda;
+    if (filtroFechaDesde) f.fecha_desde = filtroFechaDesde;
+    if (filtroFechaHasta) f.fecha_hasta = filtroFechaHasta;
+    return f;
+  }, [filtroMoneda, filtroFechaDesde, filtroFechaHasta]);
+
+  const loadCajaData = useCallback(async (cajaId: number, currentPage: number, filtros?: MovimientoFiltros) => {
+    const params = new URLSearchParams({ page: String(currentPage) });
+    if (filtros?.moneda) params.set("moneda", filtros.moneda);
+    if (filtros?.fecha_desde) params.set("fecha_desde", filtros.fecha_desde);
+    if (filtros?.fecha_hasta) params.set("fecha_hasta", filtros.fecha_hasta);
+
     const [saldoResponse, movimientosResponse] = await Promise.all([
       apiGet<CajaSaldo>(`/api/v1/cajas/${cajaId}/saldo`),
       apiGet<PaginatedMovimientos>(
-        `/api/v1/cajas/${cajaId}/movimientos?page=${currentPage}`,
+        `/api/v1/cajas/${cajaId}/movimientos?${params.toString()}`,
       ),
     ]);
 
@@ -158,6 +177,9 @@ export default function ConsultaCajaPage() {
   async function handleCajaChange(cajaId: number) {
     setSelectedCajaId(cajaId);
     setAdicionalesIds((ids) => ids.filter((id) => id !== cajaId));
+    setFiltroMoneda("");
+    setFiltroFechaDesde("");
+    setFiltroFechaHasta("");
     clearConsultaResult();
   }
 
@@ -170,7 +192,20 @@ export default function ConsultaCajaPage() {
     setError(null);
 
     try {
-      await loadCajaData(selectedCajaId, nextPage);
+      await loadCajaData(selectedCajaId, nextPage, buildFiltros());
+    } catch {
+      setError("No se pudieron cargar los movimientos.");
+    } finally {
+      setLoadingConsulta(false);
+    }
+  }
+
+  async function handleFiltroChange(newFiltros: MovimientoFiltros) {
+    if (!selectedCajaId || !hasConsulted) return;
+    setLoadingConsulta(true);
+    setError(null);
+    try {
+      await loadCajaData(selectedCajaId, 1, newFiltros);
     } catch {
       setError("No se pudieron cargar los movimientos.");
     } finally {
@@ -252,20 +287,31 @@ export default function ConsultaCajaPage() {
         <section className="consulta-conjunto page-block" data-block="saldo" aria-live="polite">
           <section className="saldo-panel">
             <h2>Subtotal general</h2>
-            <p className="saldo-valor">$ {saldoGeneral.subtotal_general}</p>
+            <div className="saldo-dual">
+              <p className="saldo-valor">
+                <span className="saldo-moneda-label">ARS</span>
+                {` $ ${saldoGeneral.subtotal_general_ars}`}
+              </p>
+              <p className="saldo-valor">
+                <span className="saldo-moneda-label">USD</span>
+                {` $ ${saldoGeneral.subtotal_general_usd}`}
+              </p>
+            </div>
           </section>
           <table className="movimiento-table">
             <thead>
               <tr>
                 <th>Caja</th>
-                <th>Subtotal</th>
+                <th>Saldo ARS</th>
+                <th>Saldo USD</th>
               </tr>
             </thead>
             <tbody>
               {saldoGeneral.cajas.map((item) => (
                 <tr key={item.caja.id}>
                   <td data-label="Caja">{item.caja.nombre}</td>
-                  <td data-label="Subtotal">$ {item.saldo_actual}</td>
+                  <td data-label="Saldo ARS">$ {item.saldo_ars}</td>
+                  <td data-label="Saldo USD">$ {item.saldo_usd}</td>
                 </tr>
               ))}
             </tbody>
@@ -277,13 +323,13 @@ export default function ConsultaCajaPage() {
         <section className="consulta-conjunto page-block" data-block="solapas" aria-live="polite">
           <section className="saldo-panel">
             <h2>Valor en conjunto</h2>
-            <p className="saldo-valor">$ {sumSaldoActual(saldosConjunto)}</p>
+            <p className="saldo-valor">$ {sumSaldoArs(saldosConjunto)}</p>
           </section>
           {saldosConjunto.map((item) => (
             <CajaConsultaSolapa
               key={`${consultaKey}-${item.caja.id}`}
               caja={item.caja}
-              saldoActual={item.saldo_actual}
+              saldoActual={item.saldo_ars}
             />
           ))}
         </section>
@@ -293,10 +339,84 @@ export default function ConsultaCajaPage() {
         <>
           <section className="saldo-panel page-block" data-block="saldo" aria-live="polite">
             <h2>Valor de caja</h2>
-            <p className="saldo-valor">
-              {saldo ? `$ ${saldo.saldo_actual}` : loadingConsulta ? "Cargando…" : "—"}
-            </p>
+            {saldo ? (
+              <div className="saldo-dual">
+                <p className="saldo-valor">
+                  <span className="saldo-moneda-label">ARS</span>
+                  {` $ ${saldo.saldo_ars}`}
+                </p>
+                <p className="saldo-valor">
+                  <span className="saldo-moneda-label">USD</span>
+                  {` $ ${saldo.saldo_usd}`}
+                </p>
+              </div>
+            ) : (
+              <p className="saldo-valor">{loadingConsulta ? "Cargando…" : "—"}</p>
+            )}
           </section>
+
+          <div className="page-block movimiento-filtros" data-block="filtros">
+            <label className="field field--inline" htmlFor="filtro-moneda">
+              <span>Moneda</span>
+              <select
+                id="filtro-moneda"
+                aria-label="Filtrar por moneda"
+                value={filtroMoneda}
+                disabled={loadingConsulta}
+                onChange={(e) => {
+                  const val = e.target.value as "ARS" | "USD" | "";
+                  setFiltroMoneda(val);
+                  void handleFiltroChange({
+                    moneda: val,
+                    fecha_desde: filtroFechaDesde || undefined,
+                    fecha_hasta: filtroFechaHasta || undefined,
+                  });
+                }}
+              >
+                <option value="">Todas</option>
+                <option value="ARS">ARS</option>
+                <option value="USD">USD</option>
+              </select>
+            </label>
+
+            <label className="field field--inline" htmlFor="filtro-fecha-desde">
+              <span>Desde</span>
+              <input
+                id="filtro-fecha-desde"
+                type="date"
+                value={filtroFechaDesde}
+                disabled={loadingConsulta}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setFiltroFechaDesde(val);
+                  void handleFiltroChange({
+                    moneda: filtroMoneda || undefined,
+                    fecha_desde: val || undefined,
+                    fecha_hasta: filtroFechaHasta || undefined,
+                  });
+                }}
+              />
+            </label>
+
+            <label className="field field--inline" htmlFor="filtro-fecha-hasta">
+              <span>Hasta</span>
+              <input
+                id="filtro-fecha-hasta"
+                type="date"
+                value={filtroFechaHasta}
+                disabled={loadingConsulta}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setFiltroFechaHasta(val);
+                  void handleFiltroChange({
+                    moneda: filtroMoneda || undefined,
+                    fecha_desde: filtroFechaDesde || undefined,
+                    fecha_hasta: val || undefined,
+                  });
+                }}
+              />
+            </label>
+          </div>
 
           <div className="page-block" data-block="historial">
             <MovimientoTable movimientos={movimientos} />

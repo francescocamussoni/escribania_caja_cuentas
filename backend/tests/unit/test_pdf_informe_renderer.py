@@ -52,8 +52,10 @@ def test_render_caja_pdf_includes_header_signs_and_dual_saldos() -> None:
     pdf_bytes = render_caja_pdf(
         metadata=metadata,
         movimientos=[movimiento],
-        saldo_cierre=Decimal("1500.00"),
-        saldo_actual=Decimal("2000.00"),
+        saldo_cierre_ars=Decimal("1500.00"),
+        saldo_cierre_usd=None,
+        saldo_actual_ars=Decimal("2000.00"),
+        saldo_actual_usd=Decimal("0"),
         compress=False,
     )
 
@@ -62,9 +64,9 @@ def test_render_caja_pdf_includes_header_signs_and_dual_saldos() -> None:
     assert "Informe de Caja" in pdf_text
     assert "Ebel" in pdf_text
     assert "Entrada +1500.00" in pdf_text
-    assert "Saldo al cierre del per" in pdf_text
+    assert "Saldo ARS al cierre del per" in pdf_text
     assert "1500.00" in pdf_text
-    assert "Saldo actual" in pdf_text
+    assert "Saldo actual ARS" in pdf_text
     assert "2000.00" in pdf_text
 
 
@@ -86,8 +88,10 @@ def test_render_caja_pdf_salida_uses_minus_sign() -> None:
     pdf_bytes = render_caja_pdf(
         metadata=metadata,
         movimientos=[movimiento],
-        saldo_cierre=Decimal("500.00"),
-        saldo_actual=Decimal("500.00"),
+        saldo_cierre_ars=Decimal("500.00"),
+        saldo_cierre_usd=None,
+        saldo_actual_ars=Decimal("500.00"),
+        saldo_actual_usd=Decimal("0"),
         compress=False,
     )
     pdf_text = pdf_bytes.decode("latin-1", errors="ignore")
@@ -105,15 +109,17 @@ def test_render_caja_pdf_empty_period_shows_message_without_cierre() -> None:
     pdf_bytes = render_caja_pdf(
         metadata=metadata,
         movimientos=[],
-        saldo_cierre=None,
-        saldo_actual=Decimal("750.00"),
+        saldo_cierre_ars=None,
+        saldo_cierre_usd=None,
+        saldo_actual_ars=Decimal("750.00"),
+        saldo_actual_usd=Decimal("0"),
         compress=False,
     )
     pdf_text = pdf_bytes.decode("latin-1", errors="ignore")
 
     assert "No hay movimientos en el per" in pdf_text
-    assert "Saldo al cierre del per" not in pdf_text
-    assert "Saldo actual" in pdf_text
+    assert "Saldo ARS al cierre del per" not in pdf_text
+    assert "Saldo actual ARS" in pdf_text
     assert "750.00" in pdf_text
 
 
@@ -244,8 +250,10 @@ def test_render_caja_pdf_shows_resolved_period_in_header() -> None:
     pdf_bytes = render_caja_pdf(
         metadata=metadata,
         movimientos=[],
-        saldo_cierre=None,
-        saldo_actual=Decimal("0"),
+        saldo_cierre_ars=None,
+        saldo_cierre_usd=None,
+        saldo_actual_ars=Decimal("0"),
+        saldo_actual_usd=Decimal("0"),
         compress=False,
     )
     pdf_text = pdf_bytes.decode("latin-1", errors="ignore")
@@ -264,8 +272,10 @@ def test_render_caja_pdf_uses_times_font() -> None:
     pdf_bytes = render_caja_pdf(
         metadata=metadata,
         movimientos=[],
-        saldo_cierre=None,
-        saldo_actual=Decimal("0"),
+        saldo_cierre_ars=None,
+        saldo_cierre_usd=None,
+        saldo_actual_ars=Decimal("0"),
+        saldo_actual_usd=Decimal("0"),
         compress=False,
     )
 
@@ -294,8 +304,10 @@ def test_render_caja_pdf_multipage_repeats_table_header() -> None:
     pdf_bytes = render_caja_pdf(
         metadata=metadata,
         movimientos=movimientos,
-        saldo_cierre=Decimal("300.00"),
-        saldo_actual=Decimal("300.00"),
+        saldo_cierre_ars=Decimal("300.00"),
+        saldo_cierre_usd=None,
+        saldo_actual_ars=Decimal("300.00"),
+        saldo_actual_usd=Decimal("0"),
         compress=False,
     )
     pdf_text = pdf_bytes.decode("latin-1", errors="ignore")

@@ -45,7 +45,9 @@ async def test_escribano_can_get_saldo_and_movimientos_for_all_cajas(
     cajas_response = await client.get("/api/v1/cajas", headers=escribano_headers)
     assert cajas_response.status_code == 200
     cajas = cajas_response.json()
-    assert len(cajas) == len(CAJAS_CATALOG)
+    # Integration tests share the DB within the session; other tests may add cajas,
+    # so we assert at least the 15 catalog cajas are present.
+    assert len(cajas) >= len(CAJAS_CATALOG)
 
     for caja in cajas:
         saldo_response = await client.get(
@@ -55,7 +57,7 @@ async def test_escribano_can_get_saldo_and_movimientos_for_all_cajas(
         assert saldo_response.status_code == 200
         saldo_body = saldo_response.json()
         assert saldo_body["caja"]["id"] == caja["id"]
-        assert "saldo_actual" in saldo_body
+        assert "saldo_ars" in saldo_body
 
         movimientos_response = await client.get(
             f"/api/v1/cajas/{caja['id']}/movimientos?page=1",
@@ -76,7 +78,9 @@ async def test_secretaria_can_get_saldo_and_movimientos_for_all_cajas(
     cajas_response = await client.get("/api/v1/cajas", headers=secretaria_headers)
     assert cajas_response.status_code == 200
     cajas = cajas_response.json()
-    assert len(cajas) == len(CAJAS_CATALOG)
+    # Integration tests share the DB within the session; other tests may add cajas,
+    # so we assert at least the 15 catalog cajas are present.
+    assert len(cajas) >= len(CAJAS_CATALOG)
 
     for caja in cajas:
         saldo_response = await client.get(

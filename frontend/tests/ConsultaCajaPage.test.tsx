@@ -12,11 +12,13 @@ const CAJAS = [
 
 function saldoFor(
   caja: (typeof CAJAS)[number],
-  saldoActual: string,
+  saldoArs: string,
+  saldoUsd: string = "0.00",
 ) {
   return {
     caja,
-    saldo_actual: saldoActual,
+    saldo_ars: saldoArs,
+    saldo_usd: saldoUsd,
     ultimo_movimiento_at: "2026-08-03T14:30:00-03:00",
   };
 }
@@ -34,6 +36,7 @@ function movimientosFor(
         descripcion,
         monto: "10.00",
         tipo: "entrada" as const,
+        moneda: "ARS" as const,
         subtotal: "10.00",
         fecha: "2026-08-03T14:30:00-03:00",
         editable: false,
@@ -370,12 +373,13 @@ describe("ConsultaCajaPage", () => {
       }
       if (path === "/api/v1/cajas/saldo-general") {
         return Promise.resolve({
-          subtotal_general: "1234.50",
+          subtotal_general_ars: "1234.50",
+          subtotal_general_usd: "0.00",
           cajas_incluidas: 3,
           cajas: [
-            { caja: CAJAS[0], saldo_actual: "250.00" },
-            { caja: CAJAS[1], saldo_actual: "80.00" },
-            { caja: CAJAS[2], saldo_actual: "904.50" },
+            { caja: CAJAS[0], saldo_ars: "250.00", saldo_usd: "0.00" },
+            { caja: CAJAS[1], saldo_ars: "80.00", saldo_usd: "0.00" },
+            { caja: CAJAS[2], saldo_ars: "904.50", saldo_usd: "0.00" },
           ],
         });
       }
@@ -416,12 +420,13 @@ describe("ConsultaCajaPage", () => {
       }
       if (path === "/api/v1/cajas/saldo-general") {
         return Promise.resolve({
-          subtotal_general: "1234.50",
+          subtotal_general_ars: "1234.50",
+          subtotal_general_usd: "0.00",
           cajas_incluidas: 3,
           cajas: [
-            { caja: CAJAS[0], saldo_actual: "250.00" },
-            { caja: CAJAS[1], saldo_actual: "80.00" },
-            { caja: CAJAS[2], saldo_actual: "904.50" },
+            { caja: CAJAS[0], saldo_ars: "250.00", saldo_usd: "0.00" },
+            { caja: CAJAS[1], saldo_ars: "80.00", saldo_usd: "0.00" },
+            { caja: CAJAS[2], saldo_ars: "904.50", saldo_usd: "0.00" },
           ],
         });
       }
@@ -465,3 +470,161 @@ describe("ConsultaCajaPage", () => {
     expect(screen.queryByRole("heading", { name: /subtotal general/i })).not.toBeInTheDocument();
   });
 });
+
+// ---------------------------------------------------------------------------
+// T028 — Filtros de moneda y fecha en Registro y Consulta (TDD — TDD red)
+// Deben FALLAR hasta que T032 / T033 implementen los controles.
+// ---------------------------------------------------------------------------
+
+describe("ConsultaCajaPage — filtros de listado (T028)", () => {
+  beforeEach(() => {
+    authState.rol = "escribano";
+    apiGet.mockImplementation((path: string) => {
+      if (path === "/api/v1/cajas") return Promise.resolve([...CAJAS]);
+      if (path === "/api/v1/cajas/1/saldo")
+        return Promise.resolve(saldoFor(CAJAS[0], "250.00"));
+      if (/\/api\/v1\/cajas\/1\/movimientos/.test(path))
+        return Promise.resolve(movimientosFor(CAJAS[0], "Movimiento consulta filtro", 1, 1));
+      return Promise.reject(new Error(`Unexpected: ${path}`));
+    });
+  });
+
+  it("T028: escribano sees a moneda filter dropdown with options Todas/ARS/USD", async () => {
+    render(
+      <MemoryRouter>
+        <ConsultaCajaPage />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("Bambina")).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /^consulta$/i }));
+
+    await waitFor(() => {
+      expect(screen.getByRole("heading", { name: /valor de caja/i })).toBeInTheDocument();
+    });
+
+    const monedaFilter = screen.getByLabelText(/filtrar.*moneda|moneda.*filtro|moneda/i);
+    expect(monedaFilter).toBeInTheDocument();
+    const options = Array.from((monedaFilter as HTMLSelectElement).options).map(
+      (o) => o.value,
+    );
+    expect(options).toContain("");
+    expect(options).toContain("ARS");
+    expect(options).toContain("USD");
+  });
+
+  it("T028: escribano sees date-from and date-to filter inputs", async () => {
+    render(
+      <MemoryRouter>
+        <ConsultaCajaPage />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("Bambina")).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /^consulta$/i }));
+
+    await waitFor(() => {
+      expect(screen.getByRole("heading", { name: /valor de caja/i })).toBeInTheDocument();
+    });
+
+    expect(screen.getByLabelText(/desde/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/hasta/i)).toBeInTheDocument();
+  });
+
+  it("T028: selecting a moneda filter calls the API with the moneda query param", async () => {
+    render(
+      <MemoryRouter>
+        <ConsultaCajaPage />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("Bambina")).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /^consulta$/i }));
+
+    await waitFor(() => {
+      expect(screen.getByRole("heading", { name: /valor de caja/i })).toBeInTheDocument();
+    });
+
+    const monedaFilter = screen.getByLabelText(/filtrar.*moneda|moneda.*filtro|moneda/i);
+    fireEvent.change(monedaFilter, { target: { value: "USD" } });
+
+    await waitFor(() => {
+      expect(apiGet).toHaveBeenCalledWith(
+        expect.stringContaining("moneda=USD"),
+      );
+    });
+  });
+
+  it("T028: clearing the moneda filter reloads the full list (no moneda param)", async () => {
+    render(
+      <MemoryRouter>
+        <ConsultaCajaPage />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("Bambina")).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /^consulta$/i }));
+
+    await waitFor(() => {
+      expect(screen.getByRole("heading", { name: /valor de caja/i })).toBeInTheDocument();
+    });
+
+    const monedaFilter = screen.getByLabelText(/filtrar.*moneda|moneda.*filtro|moneda/i);
+    fireEvent.change(monedaFilter, { target: { value: "USD" } });
+
+    await waitFor(() => {
+      expect(apiGet).toHaveBeenCalledWith(expect.stringContaining("moneda=USD"));
+    });
+
+    // limpiar filtro
+    fireEvent.change(monedaFilter, { target: { value: "" } });
+
+    await waitFor(() => {
+      const lastCall = apiGet.mock.calls[apiGet.mock.calls.length - 1][0] as string;
+      expect(lastCall).not.toContain("moneda=");
+    });
+  });
+
+  it("T028: saldo header is unchanged when a filter is applied", async () => {
+    render(
+      <MemoryRouter>
+        <ConsultaCajaPage />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("Bambina")).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /^consulta$/i }));
+
+    await waitFor(() => {
+      expect(screen.getByRole("heading", { name: /valor de caja/i })).toBeInTheDocument();
+      expect(screen.getByText("$ 250.00")).toBeInTheDocument();
+    });
+
+    // aplicar filtro — el saldo debe mantenerse
+    const monedaFilter = screen.getByLabelText(/filtrar.*moneda|moneda.*filtro|moneda/i);
+    fireEvent.change(monedaFilter, { target: { value: "USD" } });
+
+    await waitFor(() => {
+      expect(apiGet).toHaveBeenCalledWith(expect.stringContaining("moneda=USD"));
+    });
+
+    // El saldo ARS sigue mostrando $ 250.00 (no fue refiltrado)
+    expect(screen.getByText("$ 250.00")).toBeInTheDocument();
+  });
+});
+

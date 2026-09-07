@@ -60,7 +60,8 @@ def get_cajas_saldo_general(
     db: Annotated[Session, Depends(get_db)],
 ) -> CajaSaldoGeneralResponse:
     rows = list_saldos_cajas_activas(db)
-    total = sum((saldo for _, saldo in rows), Decimal("0.00"))
+    total_ars = sum((saldo_ars for _, saldo_ars, _ in rows), Decimal("0.00"))
+    total_usd = sum((saldo_usd for _, _, saldo_usd in rows), Decimal("0.00"))
     log_security_event(
         logger,
         "caja_saldo_general_viewed",
@@ -68,14 +69,16 @@ def get_cajas_saldo_general(
         cajas_incluidas=len(rows),
     )
     return CajaSaldoGeneralResponse(
-        subtotal_general=format_decimal(total),
+        subtotal_general_ars=format_decimal(total_ars),
+        subtotal_general_usd=format_decimal(total_usd),
         cajas_incluidas=len(rows),
         cajas=[
             CajaSaldoResumenItem(
                 caja=CajaResponse.model_validate(caja),
-                saldo_actual=format_decimal(saldo),
+                saldo_ars=format_decimal(saldo_ars),
+                saldo_usd=format_decimal(saldo_usd),
             )
-            for caja, saldo in rows
+            for caja, saldo_ars, saldo_usd in rows
         ],
     )
 
@@ -167,18 +170,31 @@ def get_caja_saldo(
     if caja is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Caja no encontrada")
 
-    last_movimiento = db.scalar(
+    # Each currency stream is independent — query the last row per moneda.
+    last_ars = db.scalar(
         select(Movimiento)
-        .where(Movimiento.caja_id == caja_id)
+        .where(Movimiento.caja_id == caja_id, Movimiento.moneda == "ARS")
         .order_by(Movimiento.created_at.desc(), Movimiento.id.desc())
     )
-    saldo_actual = format_decimal(last_movimiento.subtotal) if last_movimiento else "0.00"
-    ultimo_movimiento_at = (
-        last_movimiento.created_at.isoformat() if last_movimiento else None
+    last_usd = db.scalar(
+        select(Movimiento)
+        .where(Movimiento.caja_id == caja_id, Movimiento.moneda == "USD")
+        .order_by(Movimiento.created_at.desc(), Movimiento.id.desc())
     )
+
+    saldo_ars = format_decimal(last_ars.subtotal) if last_ars else "0.00"
+    saldo_usd = format_decimal(last_usd.subtotal) if last_usd else "0.00"
+
+    # Use the most recent movement across both streams for ultimo_movimiento_at
+    ultimo_movimiento_at: str | None = None
+    candidates = [m for m in (last_ars, last_usd) if m is not None]
+    if candidates:
+        latest = max(candidates, key=lambda m: (m.created_at, m.id))
+        ultimo_movimiento_at = latest.created_at.isoformat()
 
     return CajaSaldoResponse(
         caja=CajaResponse.model_validate(caja),
-        saldo_actual=saldo_actual,
+        saldo_ars=saldo_ars,
+        saldo_usd=saldo_usd,
         ultimo_movimiento_at=ultimo_movimiento_at,
     )

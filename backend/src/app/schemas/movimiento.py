@@ -1,6 +1,7 @@
 import re
 from datetime import datetime
 from decimal import Decimal
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -10,6 +11,9 @@ from app.schemas.caja import CajaResponse
 
 MONTO_PATTERN = re.compile(r"^\d+(\.\d{1,2})?$")
 
+# Shared literal for all schemas; only ARS and USD are valid currencies.
+Moneda = Literal["ARS", "USD"]
+
 
 class CreateMovimientoRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -17,6 +21,8 @@ class CreateMovimientoRequest(BaseModel):
     descripcion: str = Field(min_length=1, max_length=500)
     monto: str
     tipo: str
+    moneda: Moneda = "ARS"
+    registrar_complementario: bool = False
 
     @field_validator("descripcion")
     @classmethod
@@ -40,6 +46,14 @@ class CreateMovimientoRequest(BaseModel):
             raise ValueError("tipo debe ser 'entrada' o 'salida'")
         return value
 
+    @model_validator(mode="after")
+    def validate_complementario_only_for_usd(self) -> "CreateMovimientoRequest":
+        if self.registrar_complementario and self.moneda != "USD":
+            raise ValueError(
+                "registrar_complementario solo está permitido cuando moneda='USD'"
+            )
+        return self
+
 
 class UpdateMovimientoRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -47,10 +61,16 @@ class UpdateMovimientoRequest(BaseModel):
     descripcion: str | None = Field(default=None, min_length=1, max_length=500)
     monto: str | None = None
     tipo: str | None = None
+    moneda: Moneda | None = None
 
     @model_validator(mode="after")
     def validate_at_least_one_field(self) -> "UpdateMovimientoRequest":
-        if self.descripcion is None and self.monto is None and self.tipo is None:
+        if (
+            self.descripcion is None
+            and self.monto is None
+            and self.tipo is None
+            and self.moneda is None
+        ):
             raise ValueError("debe enviar al menos un campo para actualizar")
         return self
 
@@ -88,10 +108,18 @@ class MovimientoResponse(BaseModel):
     descripcion: str
     monto: str
     tipo: str
+    moneda: Moneda
     subtotal: str
     fecha: datetime
     editable: bool
     caja: CajaResponse
+
+
+class MovimientoCreateResponse(BaseModel):
+    """Response for POST /movimientos. Always includes movimiento; complementario is null for now (US2 adds it)."""
+
+    movimiento: MovimientoResponse
+    complementario: MovimientoResponse | None = None
 
 
 class PaginatedMovimientosResponse(BaseModel):
@@ -116,6 +144,7 @@ def movimiento_to_response(movimiento: Movimiento, user: Usuario) -> MovimientoR
         descripcion=movimiento.descripcion,
         monto=format_decimal(movimiento.monto),
         tipo=movimiento.tipo,
+        moneda=movimiento.moneda,
         subtotal=format_decimal(movimiento.subtotal),
         fecha=movimiento.created_at,
         editable=is_editable(movimiento, user),

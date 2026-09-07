@@ -209,16 +209,25 @@ def list_cajas_config(db: Session) -> list[Caja]:
     return list(db.scalars(select(Caja).order_by(Caja.id)).all())
 
 
-def list_saldos_cajas_activas(db: Session) -> list[tuple[Caja, Decimal]]:
-    rows: list[tuple[Caja, Decimal]] = []
+def list_saldos_cajas_activas(db: Session) -> list[tuple[Caja, Decimal, Decimal]]:
+    """Return (caja, saldo_ars, saldo_usd) for each active caja."""
+    rows: list[tuple[Caja, Decimal, Decimal]] = []
     for caja in list_cajas_activas(db):
-        last_subtotal = db.scalar(
+        last_ars = db.scalar(
             select(Movimiento.subtotal)
-            .where(Movimiento.caja_id == caja.id)
+            .where(Movimiento.caja_id == caja.id, Movimiento.moneda == "ARS")
             .order_by(Movimiento.created_at.desc(), Movimiento.id.desc())
             .limit(1)
         )
-        rows.append(
-            (caja, last_subtotal if last_subtotal is not None else Decimal("0.00"))
+        last_usd = db.scalar(
+            select(Movimiento.subtotal)
+            .where(Movimiento.caja_id == caja.id, Movimiento.moneda == "USD")
+            .order_by(Movimiento.created_at.desc(), Movimiento.id.desc())
+            .limit(1)
         )
+        rows.append((
+            caja,
+            last_ars if last_ars is not None else Decimal("0.00"),
+            last_usd if last_usd is not None else Decimal("0.00"),
+        ))
     return rows

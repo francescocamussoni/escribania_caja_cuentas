@@ -60,7 +60,8 @@ export default function MovimientoTable({
               }
             >
               {movimiento.tipo === "salida" ? "-" : ""}
-              {movimiento.monto}
+              {movimiento.monto}{" "}
+              <span className="movimiento-moneda-badge">{movimiento.moneda}</span>
             </td>
             <td data-label="Subtotal">{movimiento.subtotal}</td>
             <td data-label="Fecha">{formatFecha(movimiento.fecha)}</td>

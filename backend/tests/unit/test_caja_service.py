@@ -181,7 +181,7 @@ def test_list_saldos_cajas_activas_excludes_archivadas(db_session: Session) -> N
     actor = _actor(db_session)
     service = MovimientoService(db_session)
     before = list_saldos_cajas_activas(db_session)
-    before_total = sum((saldo for _, saldo in before), Decimal("0.00"))
+    before_total = sum((saldo_ars for _, saldo_ars, _usd in before), Decimal("0.00"))
     before_count = len(before)
 
     a = create_caja(db_session, nombre="Suma Activa A", actor=actor)
@@ -212,7 +212,7 @@ def test_list_saldos_cajas_activas_excludes_archivadas(db_session: Session) -> N
     archive_caja(db_session, caja_id=archived.id, actor=actor)
 
     rows = list_saldos_cajas_activas(db_session)
-    by_id = {caja.id: saldo for caja, saldo in rows}
+    by_id = {caja.id: saldo_ars for caja, saldo_ars, _saldo_usd in rows}
 
     assert len(rows) == before_count + 2
     assert archived.id not in by_id

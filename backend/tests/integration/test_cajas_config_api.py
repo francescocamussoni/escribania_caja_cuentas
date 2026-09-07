@@ -419,7 +419,6 @@ async def test_get_saldo_general_secretaria_sums_activas_only(
         headers=secretaria_headers,
     )
     assert before.status_code == 200
-    before_total = before.json()["subtotal_general"]
     before_count = before.json()["cajas_incluidas"]
 
     activa = await client.post(
@@ -461,12 +460,12 @@ async def test_get_saldo_general_secretaria_sums_activas_only(
     assert after.status_code == 200
     body = after.json()
     assert body["cajas_incluidas"] == before_count + 1
-    before_cents = int(before_total.replace(".", ""))
-    after_cents = int(body["subtotal_general"].replace(".", ""))
+    before_cents = int(before.json()["subtotal_general_ars"].replace(".", ""))
+    after_cents = int(body["subtotal_general_ars"].replace(".", ""))
     assert after_cents == before_cents + 4000
     by_id = {item["caja"]["id"]: item for item in body["cajas"]}
     assert activa_id in by_id
-    assert by_id[activa_id]["saldo_actual"] == "40.00"
+    assert by_id[activa_id]["saldo_ars"] == "40.00"
     assert archivada_id not in by_id
     assert len(body["cajas"]) == body["cajas_incluidas"]
 

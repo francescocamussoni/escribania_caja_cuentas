@@ -140,7 +140,8 @@ def _render_movimiento_row(
     col_widths: Sequence[float],
 ) -> None:
     pdf.cell(col_widths[0], ROW_HEIGHT, movimiento.descripcion[:60], border=1)
-    pdf.cell(col_widths[1], ROW_HEIGHT, _format_monto_movimiento(movimiento), border=1)
+    monto_str = _format_monto_movimiento(movimiento)
+    pdf.cell(col_widths[1], ROW_HEIGHT, f"{monto_str} {movimiento.moneda}", border=1)
     pdf.cell(col_widths[2], ROW_HEIGHT, format_decimal(movimiento.subtotal), border=1)
     pdf.cell(
         col_widths[3],
@@ -164,8 +165,10 @@ def render_caja_pdf(
     *,
     metadata: InformeCajaMetadata,
     movimientos: list[Movimiento],
-    saldo_cierre: Decimal | None,
-    saldo_actual: Decimal,
+    saldo_cierre_ars: Decimal | None,
+    saldo_cierre_usd: Decimal | None,
+    saldo_actual_ars: Decimal,
+    saldo_actual_usd: Decimal,
     compress: bool = True,
 ) -> bytes:
     pdf = _create_pdf(compress=compress)
@@ -197,18 +200,33 @@ def render_caja_pdf(
 
     pdf.ln(6)
     pdf.set_font(FONT_FAMILY, "B", BODY_SIZE)
-    if saldo_cierre is not None:
+    if saldo_cierre_ars is not None:
         pdf.cell(
             0,
             8,
-            f"Saldo al cierre del periodo: $ {format_decimal(saldo_cierre)}",
+            f"Saldo ARS al cierre del periodo: $ {format_decimal(saldo_cierre_ars)}",
+            new_x="LMARGIN",
+            new_y="NEXT",
+        )
+    if saldo_cierre_usd is not None:
+        pdf.cell(
+            0,
+            8,
+            f"Saldo USD al cierre del periodo: $ {format_decimal(saldo_cierre_usd)}",
             new_x="LMARGIN",
             new_y="NEXT",
         )
     pdf.cell(
         0,
         8,
-        f"Saldo actual: $ {format_decimal(saldo_actual)}",
+        f"Saldo actual ARS: $ {format_decimal(saldo_actual_ars)}",
+        new_x="LMARGIN",
+        new_y="NEXT",
+    )
+    pdf.cell(
+        0,
+        8,
+        f"Saldo actual USD: $ {format_decimal(saldo_actual_usd)}",
         new_x="LMARGIN",
         new_y="NEXT",
     )

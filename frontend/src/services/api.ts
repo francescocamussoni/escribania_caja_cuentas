@@ -103,17 +103,20 @@ export type Caja = {
 
 export type CajaSaldo = {
   caja: Caja;
-  saldo_actual: string;
+  saldo_ars: string;
+  saldo_usd: string;
   ultimo_movimiento_at: string | null;
 };
 
 export type CajaSaldoGeneralItem = {
   caja: Caja;
-  saldo_actual: string;
+  saldo_ars: string;
+  saldo_usd: string;
 };
 
 export type CajaSaldoGeneral = {
-  subtotal_general: string;
+  subtotal_general_ars: string;
+  subtotal_general_usd: string;
   cajas_incluidas: number;
   cajas: CajaSaldoGeneralItem[];
 };
@@ -123,10 +126,16 @@ export type Movimiento = {
   descripcion: string;
   monto: string;
   tipo: "entrada" | "salida";
+  moneda: "ARS" | "USD";
   subtotal: string;
   fecha: string;
   editable: boolean;
   caja: Caja;
+};
+
+export type MovimientoCreateResponse = {
+  movimiento: Movimiento;
+  complementario: Movimiento | null;
 };
 
 export type PaginatedMovimientos = {
@@ -141,12 +150,15 @@ export type CreateMovimientoPayload = {
   descripcion: string;
   monto: string;
   tipo: "entrada" | "salida";
+  moneda?: "ARS" | "USD";
+  registrar_complementario?: boolean;
 };
 
 export type UpdateMovimientoPayload = {
   descripcion?: string;
   monto?: string;
   tipo?: "entrada" | "salida";
+  moneda?: "ARS" | "USD";
 };
 
 export type PlazoFijo = {
@@ -268,20 +280,34 @@ export async function fetchSaldoGeneral(): Promise<CajaSaldoGeneral> {
   return apiGet<CajaSaldoGeneral>("/api/v1/cajas/saldo-general");
 }
 
+export type MovimientoFiltros = {
+  moneda?: "ARS" | "USD" | "";
+  fecha_desde?: string;
+  fecha_hasta?: string;
+};
+
 export async function fetchMovimientos(
   cajaId: number,
   page: number,
+  filtros?: MovimientoFiltros,
 ): Promise<PaginatedMovimientos> {
+  const params = new URLSearchParams({ page: String(page) });
+  if (filtros?.moneda) params.set("moneda", filtros.moneda);
+  if (filtros?.fecha_desde) params.set("fecha_desde", filtros.fecha_desde);
+  if (filtros?.fecha_hasta) params.set("fecha_hasta", filtros.fecha_hasta);
   return apiGet<PaginatedMovimientos>(
-    `/api/v1/cajas/${cajaId}/movimientos?page=${page}`,
+    `/api/v1/cajas/${cajaId}/movimientos?${params.toString()}`,
   );
 }
 
 export async function createMovimiento(
   cajaId: number,
   payload: CreateMovimientoPayload,
-): Promise<Movimiento> {
-  return apiPost<Movimiento>(`/api/v1/cajas/${cajaId}/movimientos`, payload);
+): Promise<MovimientoCreateResponse> {
+  return apiPost<MovimientoCreateResponse>(
+    `/api/v1/cajas/${cajaId}/movimientos`,
+    payload,
+  );
 }
 
 export async function updateMovimiento(

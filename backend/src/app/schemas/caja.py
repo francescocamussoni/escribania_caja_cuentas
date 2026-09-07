@@ -26,18 +26,21 @@ class CajaResponse(BaseModel):
 
 class CajaSaldoResponse(BaseModel):
     caja: CajaResponse
-    saldo_actual: str
+    saldo_ars: str
+    saldo_usd: str
     ultimo_movimiento_at: str | None = None
 
 
 class CajaSaldoResumenItem(BaseModel):
     caja: CajaResponse
-    saldo_actual: str
+    saldo_ars: str
+    saldo_usd: str
 
 
 class CajaSaldoGeneralResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    subtotal_general: str
+    subtotal_general_ars: str
+    subtotal_general_usd: str
     cajas_incluidas: int
     cajas: list[CajaSaldoResumenItem]

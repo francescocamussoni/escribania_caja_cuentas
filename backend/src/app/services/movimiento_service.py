@@ -33,15 +33,17 @@ class MovimientoService:
         descripcion: str,
         monto: Decimal,
         tipo: str,
+        moneda: str = "ARS",
         user: Usuario,
     ) -> Movimiento:
         cleaned_description = descripcion.strip()
         if not cleaned_description:
             raise ValueError("descripcion no puede estar vacía")
 
+        # Lock and fetch the last row of the *same currency stream* only.
         last_movimiento = self.db.scalar(
             select(Movimiento)
-            .where(Movimiento.caja_id == caja_id)
+            .where(Movimiento.caja_id == caja_id, Movimiento.moneda == moneda)
             .order_by(Movimiento.created_at.desc(), Movimiento.id.desc())
             .with_for_update()
         )
@@ -53,6 +55,7 @@ class MovimientoService:
             descripcion=cleaned_description,
             monto=monto,
             tipo=tipo,
+            moneda=moneda,
             subtotal=subtotal,
             created_by=user.id,
         )
@@ -61,10 +64,44 @@ class MovimientoService:
         self.db.refresh(movimiento)
         return movimiento
 
-    def recalculate_subtotals(self, caja_id: int) -> None:
+    def create_movimiento_pair(
+        self,
+        *,
+        caja_id: int,
+        descripcion: str,
+        monto: Decimal,
+        tipo: str,
+        user: "Usuario",
+    ) -> "tuple[Movimiento, Movimiento]":
+        """
+        Create an atomic pair of USD movimientos with opposite tipos.
+        Both are flushed in the same transaction; the caller must commit.
+        Returns (principal, complementario).
+        """
+        principal = self.create_movimiento(
+            caja_id=caja_id,
+            descripcion=descripcion,
+            monto=monto,
+            tipo=tipo,
+            moneda="USD",
+            user=user,
+        )
+        complementario_tipo = "salida" if tipo == "entrada" else "entrada"
+        complementario = self.create_movimiento(
+            caja_id=caja_id,
+            descripcion=principal.descripcion,
+            monto=monto,
+            tipo=complementario_tipo,
+            moneda="USD",
+            user=user,
+        )
+        return principal, complementario
+
+    def recalculate_subtotals(self, caja_id: int, moneda: str = "ARS") -> None:
+        """Recalculate subtotals for a single currency stream (caja_id, moneda)."""
         movimientos = self.db.scalars(
             select(Movimiento)
-            .where(Movimiento.caja_id == caja_id)
+            .where(Movimiento.caja_id == caja_id, Movimiento.moneda == moneda)
             .order_by(Movimiento.created_at.asc(), Movimiento.id.asc())
             .with_for_update()
         ).all()
@@ -88,6 +125,7 @@ class MovimientoService:
         descripcion: str | None = None,
         monto: Decimal | None = None,
         tipo: str | None = None,
+        moneda: str | None = None,
     ) -> Movimiento:
         movimiento = self.db.scalar(
             select(Movimiento)
@@ -112,9 +150,20 @@ class MovimientoService:
                 raise ValueError("tipo inválido: debe ser 'entrada' o 'salida'")
             movimiento.tipo = tipo
 
+        # Detect whether the currency stream is changing before mutating.
+        old_moneda = movimiento.moneda
+        if moneda is not None and moneda != old_moneda:
+            movimiento.moneda = moneda
+
         movimiento.updated_at = datetime.now(timezone.utc)
         movimiento.updated_by = user.id
-        self.recalculate_subtotals(caja_id)
+
+        # Always recalculate the current (new) stream.
+        self.recalculate_subtotals(caja_id, moneda=movimiento.moneda)
+        # If the currency changed, also repair the stream that lost a row.
+        if moneda is not None and moneda != old_moneda:
+            self.recalculate_subtotals(caja_id, moneda=old_moneda)
+
         self.db.flush()
         self.db.refresh(movimiento)
         return movimiento
@@ -139,4 +188,4 @@ class MovimientoService:
 
         self.db.delete(movimiento)
         self.db.flush()
-        self.recalculate_subtotals(caja_id)
+        self.recalculate_subtotals(caja_id, moneda=movimiento.moneda)

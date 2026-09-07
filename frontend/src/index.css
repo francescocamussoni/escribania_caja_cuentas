@@ -324,6 +324,78 @@ select {
   font-variant-numeric: tabular-nums;
 }
 
+.saldo-dual {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.saldo-moneda-label {
+  display: inline-block;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #5b6477;
+  letter-spacing: 0.04em;
+  min-width: 2.75rem;
+  text-transform: uppercase;
+  vertical-align: baseline;
+}
+
+/* ── Filtros de listado (US3) ─────────────────────────────────────────── */
+.movimiento-filtros {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: flex-end;
+}
+
+.movimiento-filtros .field--inline {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-width: 9rem;
+}
+
+.movimiento-filtros .field--inline span {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #5b6477;
+}
+
+.movimiento-filtros select,
+.movimiento-filtros input[type="date"] {
+  padding: 0.35rem 0.5rem;
+  border: 1px solid #c4c9d4;
+  border-radius: 4px;
+  font-size: 0.9rem;
+  background: #fff;
+}
+
+/* Mobile: each filter control takes full width, pager is preserved below */
+@media (max-width: 640px) {
+  .movimiento-filtros {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.5rem;
+  }
+
+  .movimiento-filtros .field--inline {
+    min-width: 0;
+    width: 100%;
+  }
+}
+
+/* Badge de moneda junto al monto */
+.movimiento-moneda-badge {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: inherit;
+  opacity: 0.6;
+  margin-left: 0.25rem;
+}
+
 .consulta-conjunto {
   display: grid;
   gap: 0.75rem;
@@ -373,7 +445,7 @@ select {
 
 .movimiento-form {
   display: grid;
-  grid-template-columns: minmax(12rem, 2fr) minmax(8rem, 1fr) auto auto;
+  grid-template-columns: minmax(12rem, 2fr) minmax(8rem, 1fr) minmax(5rem, auto) auto auto;
   gap: 1rem;
   align-items: end;
   padding: 1.25rem;
@@ -400,7 +472,8 @@ select {
   }
 
   .movimiento-form__descripcion,
-  .movimiento-form__monto {
+  .movimiento-form__monto,
+  .movimiento-form__moneda {
     grid-column: 1 / -1;
   }
 
@@ -677,8 +750,47 @@ select {
   margin-right: 1rem;
 }
 
-.movimiento-edit-panel {
-  margin: 1.5rem 0;
+.complementario-dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(22, 33, 62, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 50;
+  padding: 1rem;
+}
+
+.complementario-dialog {
+  background: #fff;
+  border-radius: 0.75rem;
+  padding: 1.5rem;
+  box-shadow: 0 12px 32px rgba(22, 33, 62, 0.2);
+  max-width: 24rem;
+  width: 100%;
+  display: grid;
+  gap: 1.25rem;
+}
+
+.complementario-dialog__text {
+  margin: 0;
+  font-size: 1.1rem;
+  font-weight: 600;
+  text-align: center;
+}
+
+.complementario-dialog__actions {
+  display: flex;
+  gap: 0.75rem;
+  justify-content: center;
+}
+
+.complementario-dialog__actions .button {
+  flex: 1;
+  min-height: 2.75rem;
+}
+
+.movimiento-edit-panel {  margin: 1.5rem 0;
   padding: 1.25rem;
   border-radius: 0.75rem;
   background: #fff;

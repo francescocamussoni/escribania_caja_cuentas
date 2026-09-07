@@ -52,8 +52,10 @@ def generate_informe_pdf(
             date_from=date_from,
             date_to=date_to,
         )
-        saldo_cierre = service.compute_saldo_cierre(movimientos)
-        saldo_actual = service.fetch_saldo_actual(payload.caja_id)
+        saldo_cierre_ars = service.compute_saldo_cierre_by_moneda(movimientos, "ARS")
+        saldo_cierre_usd = service.compute_saldo_cierre_by_moneda(movimientos, "USD")
+        saldo_actual_ars = service.fetch_saldo_ars(payload.caja_id)
+        saldo_actual_usd = service.fetch_saldo_usd(payload.caja_id)
         metadata = InformeCajaMetadata(
             caja_nombre=caja.nombre,
             date_from=date_from,
@@ -63,8 +65,10 @@ def generate_informe_pdf(
         pdf_bytes = render_caja_pdf(
             metadata=metadata,
             movimientos=movimientos,
-            saldo_cierre=saldo_cierre,
-            saldo_actual=saldo_actual,
+            saldo_cierre_ars=saldo_cierre_ars,
+            saldo_cierre_usd=saldo_cierre_usd,
+            saldo_actual_ars=saldo_actual_ars,
+            saldo_actual_usd=saldo_actual_usd,
         )
     elif payload.tipo == InformeTipo.PLAZO_FIJO:
         plazos = service.fetch_plazos_informe(

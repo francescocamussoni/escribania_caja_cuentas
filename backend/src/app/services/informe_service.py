@@ -59,6 +59,18 @@ def compute_saldo_cierre(movimientos: list[Movimiento]) -> Decimal | None:
     return latest.subtotal
 
 
+def compute_saldo_cierre_by_moneda(
+    movimientos: list[Movimiento],
+    moneda: str,
+) -> Decimal | None:
+    """Return the closing subtotal for a specific currency stream."""
+    filtered = [m for m in movimientos if m.moneda == moneda]
+    if not filtered:
+        return None
+    latest = max(filtered, key=lambda m: (m.created_at, m.id))
+    return latest.subtotal
+
+
 def _movimiento_ar_date():
     return cast(func.timezone(AR_TZ, Movimiento.created_at), Date)
 
@@ -128,9 +140,32 @@ class InformeService:
         )
         return last_movimiento.subtotal if last_movimiento else Decimal("0")
 
+    def fetch_saldo_ars(self, caja_id: int) -> Decimal:
+        last = self.db.scalar(
+            select(Movimiento)
+            .where(Movimiento.caja_id == caja_id, Movimiento.moneda == "ARS")
+            .order_by(Movimiento.created_at.desc(), Movimiento.id.desc())
+        )
+        return last.subtotal if last else Decimal("0")
+
+    def fetch_saldo_usd(self, caja_id: int) -> Decimal:
+        last = self.db.scalar(
+            select(Movimiento)
+            .where(Movimiento.caja_id == caja_id, Movimiento.moneda == "USD")
+            .order_by(Movimiento.created_at.desc(), Movimiento.id.desc())
+        )
+        return last.subtotal if last else Decimal("0")
+
     @staticmethod
     def compute_saldo_cierre(movimientos: list[Movimiento]) -> Decimal | None:
         return compute_saldo_cierre(movimientos)
+
+    @staticmethod
+    def compute_saldo_cierre_by_moneda(
+        movimientos: list[Movimiento],
+        moneda: str,
+    ) -> Decimal | None:
+        return compute_saldo_cierre_by_moneda(movimientos, moneda)
 
     def fetch_plazos_informe(
         self,
