@@ -119,6 +119,17 @@ def create_movimiento(
 
     service = MovimientoService(db)
 
+    # T032: Compute fecha_override from fecha_manual at 09:00 AR (US3)
+    # Backend applies fixed time; frontend sends YYYY-MM-DD only.
+    fecha_override = None
+    if payload.fecha_manual is not None:
+        from datetime import datetime as _dt
+        parsed = _dt.strptime(payload.fecha_manual, "%Y-%m-%d")
+        fecha_override = _dt(
+            parsed.year, parsed.month, parsed.day, 9, 0, 0,
+            tzinfo=_ARGENTINA_TZ,
+        )
+
     if payload.registrar_complementario:
         try:
             movimiento, complementario_mov = service.create_movimiento_pair(
@@ -126,6 +137,8 @@ def create_movimiento(
                 descripcion=payload.descripcion,
                 monto=Decimal(payload.monto),
                 tipo=payload.tipo,
+                moneda=payload.moneda,
+                fecha_override=fecha_override,
                 user=current_user,
             )
         except Exception:
@@ -161,6 +174,7 @@ def create_movimiento(
         monto=Decimal(payload.monto),
         tipo=payload.tipo,
         moneda=payload.moneda,
+        fecha_override=fecha_override,
         user=current_user,
     )
     db.commit()

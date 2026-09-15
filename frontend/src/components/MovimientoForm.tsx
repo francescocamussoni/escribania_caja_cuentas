@@ -22,11 +22,11 @@ export default function MovimientoForm({
   const [descripcion, setDescripcion] = useState("");
   const [monto, setMonto] = useState("");
   const [moneda, setMoneda] = useState<"ARS" | "USD">("ARS");
+  // T040 (US3): Estado de fecha manual — NO se resetea al cambiar de caja (T038)
+  const [fechaManual, setFechaManual] = useState("");
   const [additionalCajaIds, setAdditionalCajaIds] = useState<number[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  // Dialog state: null = closed; "entrada" | "salida" = waiting for USD confirmation
-  const [pendingTipo, setPendingTipo] = useState<"entrada" | "salida" | null>(null);
 
   const handleAdditionalCajasChange = useCallback((selectedCajaIds: number[]) => {
     setAdditionalCajaIds(selectedCajaIds);
@@ -46,12 +46,21 @@ export default function MovimientoForm({
 
     try {
       await onSubmit(
-        { descripcion, monto, tipo, moneda, registrar_complementario },
+        {
+          descripcion,
+          monto,
+          tipo,
+          moneda,
+          registrar_complementario,
+          // T042 (US3): incluir fecha_manual solo cuando tiene valor
+          ...(fechaManual ? { fecha_manual: fechaManual } : {}),
+        },
         additionalCajaIds,
       );
       setDescripcion("");
       setMonto("");
       setAdditionalCajaIds([]);
+      setFechaManual("");
     } catch {
       setError("No se pudo registrar el movimiento.");
     } finally {
@@ -59,38 +68,16 @@ export default function MovimientoForm({
     }
   }
 
+  // T018: handleButtonClick va directo a doSubmit sin bifurcación por moneda (US2)
   function handleButtonClick(tipo: CreateMovimientoPayload["tipo"]) {
-    // Validate before showing dialog (FR-011)
+    // Validate before submitting (FR-011)
     if (!descripcion.trim() || !monto.trim()) {
       return; // HTML required will handle native validation
     }
-
-    if (moneda === "USD") {
-      // Show complementario dialog (FR-006, FR-007)
-      setPendingTipo(tipo);
-    } else {
-      // ARS goes straight through without dialog (FR-005, FR-010)
-      void doSubmit(tipo, false);
-    }
-  }
-
-  async function handleDialogConfirm() {
-    const tipo = pendingTipo!;
-    setPendingTipo(null);
-    await doSubmit(tipo, true);
-  }
-
-  async function handleDialogCancel() {
-    const tipo = pendingTipo!;
-    setPendingTipo(null);
-    await doSubmit(tipo, false);
+    void doSubmit(tipo, false);
   }
 
   const isDisabled = disabled || submitting;
-  const dialogText =
-    pendingTipo === "entrada"
-      ? "¿Registrar también como salida?"
-      : "¿Registrar también como entrada?";
 
   return (
     <section className="movimiento-form-section">
@@ -134,6 +121,19 @@ export default function MovimientoForm({
           </select>
         </label>
 
+        {/* T041 (US3): Selector de fecha manual — NO se resetea con activeCajaId */}
+        <label className="field movimiento-form__fecha" htmlFor="fecha-manual-input">
+          <span>Fecha (opcional)</span>
+          <input
+            id="fecha-manual-input"
+            name="fecha_manual"
+            type="date"
+            value={fechaManual}
+            disabled={isDisabled}
+            onChange={(event) => setFechaManual(event.target.value)}
+          />
+        </label>
+
         <button
           type="button"
           className="button btn-entrada movimiento-form__action"
@@ -152,37 +152,21 @@ export default function MovimientoForm({
           Salida
         </button>
 
+        {/* T019: Botón "Entrada y Salida" — registra el par atómico (US1) */}
+        <button
+          type="button"
+          className="button btn-entrada-salida movimiento-form__action"
+          disabled={isDisabled}
+          onClick={() => {
+            if (!descripcion.trim() || !monto.trim()) return;
+            void doSubmit("entrada", true);
+          }}
+        >
+          Entrada y Salida
+        </button>
+
         {error ? <p className="form-error movimiento-form__error">{error}</p> : null}
       </form>
-
-      {pendingTipo !== null ? (
-        <div
-          className="complementario-dialog-backdrop"
-          role="dialog"
-          aria-modal="true"
-          aria-label="Confirmar movimiento complementario"
-        >
-          <div className="complementario-dialog">
-            <p className="complementario-dialog__text">{dialogText}</p>
-            <div className="complementario-dialog__actions">
-              <button
-                type="button"
-                className="button button--primary"
-                onClick={() => void handleDialogConfirm()}
-              >
-                Sí
-              </button>
-              <button
-                type="button"
-                className="button button--secondary"
-                onClick={() => void handleDialogCancel()}
-              >
-                No
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
 
       <CajasAdicionalesSelector
         cajas={cajas}

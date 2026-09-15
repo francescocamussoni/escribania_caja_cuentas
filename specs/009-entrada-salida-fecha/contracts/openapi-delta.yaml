@@ -1,0 +1,188 @@
+openapi: 3.0.0
+info:
+  title: Escribanía Cajas API — Delta 009-entrada-salida-fecha
+  description: |
+    Este documento describe **únicamente los cambios** al contrato de API existente
+    introducidos por la feature 009-entrada-salida-fecha.
+    El contrato completo base está en `swagger/openapi.yaml`.
+  version: "009"
+
+paths:
+  /api/v1/cajas/{caja_id}/movimientos:
+    post:
+      summary: Crear movimiento (con soporte de par simultáneo y fecha manual)
+      description: |
+        **Cambios respecto a versión anterior:**
+        1. `registrar_complementario: true` ahora funciona para **cualquier moneda** (ARS y USD).
+           Anteriormente era rechazado para ARS con HTTP 422.
+        2. Nuevo campo opcional `fecha_manual` (`YYYY-MM-DD`). El backend convierte la fecha
+           a `YYYY-MM-DDT09:00:00-03:00` y la almacena en `fecha_override`.
+        3. Cuando `fecha_manual` se omite, el comportamiento es idéntico al anterior.
+      operationId: createMovimiento
+      tags: [movimientos]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: caja_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateMovimientoRequest'
+            examples:
+              entrada_simple_ars:
+                summary: Entrada simple ARS (sin cambio)
+                value:
+                  descripcion: "Honorarios escritura"
+                  monto: "15000.00"
+                  tipo: "entrada"
+                  moneda: "ARS"
+                  registrar_complementario: false
+              par_simultaneo_ars:
+                summary: Entrada y Salida simultáneo ARS (nuevo)
+                value:
+                  descripcion: "Transferencia interna"
+                  monto: "5000.00"
+                  tipo: "entrada"
+                  moneda: "ARS"
+                  registrar_complementario: true
+              par_simultaneo_usd:
+                summary: Entrada y Salida simultáneo USD (antes requería diálogo)
+                value:
+                  descripcion: "Compra dólares"
+                  monto: "200.00"
+                  tipo: "entrada"
+                  moneda: "USD"
+                  registrar_complementario: true
+              entrada_con_fecha_manual:
+                summary: Entrada con fecha específica (nuevo)
+                value:
+                  descripcion: "Cobro retroactivo"
+                  monto: "8500.00"
+                  tipo: "entrada"
+                  moneda: "ARS"
+                  registrar_complementario: false
+                  fecha_manual: "2026-09-10"
+              par_con_fecha_manual:
+                summary: Par Entrada+Salida con fecha manual (nuevo)
+                value:
+                  descripcion: "Movimiento con fecha"
+                  monto: "300.00"
+                  tipo: "entrada"
+                  moneda: "USD"
+                  registrar_complementario: true
+                  fecha_manual: "2026-09-01"
+      responses:
+        '201':
+          description: Movimiento(s) creado(s) exitosamente
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MovimientoCreateResponse'
+        '400':
+          description: Validación fallida (formato de monto, tipo inválido, formato de fecha inválido)
+        '401':
+          description: No autenticado
+        '403':
+          description: Rol insuficiente (requiere secretaria)
+        '404':
+          description: Caja no encontrada
+        '500':
+          description: Error al crear el par de movimientos (transacción rollback)
+
+components:
+  schemas:
+    CreateMovimientoRequest:
+      type: object
+      required: [descripcion, monto, tipo]
+      additionalProperties: false
+      properties:
+        descripcion:
+          type: string
+          minLength: 1
+          maxLength: 500
+        monto:
+          type: string
+          pattern: '^\d+(\.\d{1,2})?$'
+          description: Monto en formato decimal (ej. "1500.00")
+        tipo:
+          type: string
+          enum: [entrada, salida]
+        moneda:
+          type: string
+          enum: [ARS, USD]
+          default: ARS
+        registrar_complementario:
+          type: boolean
+          default: false
+          description: |
+            Si `true`, crea un par atómico (entrada + salida) en la misma caja y moneda.
+            **CAMBIO v009**: ya no se restringe a moneda USD — funciona con ARS y USD.
+        fecha_manual:
+          type: string
+          pattern: '^\d{4}-\d{2}-\d{2}$'
+          nullable: true
+          description: |
+            **NUEVO v009**. Fecha en formato YYYY-MM-DD. El backend almacena
+            `YYYY-MM-DDT09:00:00-03:00` como `fecha_override` del movimiento.
+            Si se omite, la fecha del movimiento es la hora del servidor en el momento
+            del request (comportamiento anterior preservado).
+
+    MovimientoResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+        descripcion:
+          type: string
+        monto:
+          type: string
+        tipo:
+          type: string
+          enum: [entrada, salida]
+        moneda:
+          type: string
+          enum: [ARS, USD]
+        subtotal:
+          type: string
+        fecha:
+          type: string
+          format: date-time
+          description: |
+            **CAMBIO v009**: si el movimiento tiene `fecha_override`, se retorna ese valor.
+            Si no, se retorna `created_at` (mismo comportamiento que antes para movimientos sin fecha manual).
+        editable:
+          type: boolean
+        caja:
+          $ref: '#/components/schemas/CajaResponse'
+
+    MovimientoCreateResponse:
+      type: object
+      properties:
+        movimiento:
+          $ref: '#/components/schemas/MovimientoResponse'
+        complementario:
+          nullable: true
+          allOf:
+            - $ref: '#/components/schemas/MovimientoResponse'
+
+    CajaResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+        nombre:
+          type: string
+        slug:
+          type: string
+
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT

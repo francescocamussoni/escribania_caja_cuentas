@@ -393,13 +393,13 @@ async def test_post_usd_omit_complementario_returns_one_movimiento(
 
 
 @pytest.mark.asyncio
-async def test_post_ars_complementario_true_returns_400(
+async def test_post_ars_complementario_true_returns_201(
     client: AsyncClient,
     secretaria_headers: dict[str, str],
 ) -> None:
     """
-    POST ARS con registrar_complementario=true debe retornar 400/422
-    (solo USD puede tener par complementario).
+    POST ARS con registrar_complementario=true debe retornar 201.
+    Desde T009, el par complementario está habilitado para ARS y USD.
     """
     response = await client.post(
         "/api/v1/cajas/5/movimientos",
@@ -413,10 +413,13 @@ async def test_post_ars_complementario_true_returns_400(
         headers=secretaria_headers,
     )
 
-    assert response.status_code in (400, 422), (
-        f"Se esperaba 400/422 para ARS+registrar_complementario=true, "
+    assert response.status_code == 201, (
+        f"Se esperaba 201 para ARS+registrar_complementario=true, "
         f"obtenido: {response.status_code}"
     )
+    body = response.json()
+    assert body["complementario"] is not None
+    assert body["complementario"]["moneda"] == "ARS"
 
 
 @pytest.mark.asyncio
@@ -681,3 +684,218 @@ async def test_get_movimientos_filter_pagination_uses_filtered_count(
     assert len(usd_items) == 1
     # total_items para el filtro debe ser >= 1 y < total sin filtro
     assert body["total_items"] >= 1
+
+
+# ---------------------------------------------------------------------------
+# T007 — TDD: par ARS con registrar_complementario=True retorna 201
+#         con movimiento y complementario no nulos.
+#         FALLA hasta que T009 elimine validate_complementario_only_for_usd
+#         y T011 pase moneda al create_movimiento_pair.
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_post_par_ars_registrar_complementario_returns_201(
+    client: AsyncClient,
+    secretaria_headers: dict[str, str],
+) -> None:
+    """
+    POST con registrar_complementario=True y moneda=ARS debe:
+      - retornar 201
+      - body.movimiento con moneda='ARS' y tipo=<el enviado>
+      - body.complementario no nulo, moneda='ARS', tipo opuesto
+
+    T007 — TDD: FALLA hasta que T009+T010+T011 implementen el par ARS.
+    """
+    caja_id = 3
+    suffix = uuid4().hex[:8]
+    payload = {
+        "descripcion": f"Par ARS {suffix}",
+        "monto": "1500.00",
+        "tipo": "entrada",
+        "moneda": "ARS",
+        "registrar_complementario": True,
+    }
+
+    response = await client.post(
+        f"/api/v1/cajas/{caja_id}/movimientos",
+        json=payload,
+        headers=secretaria_headers,
+    )
+
+    assert response.status_code == 201, (
+        f"Esperado 201, obtenido {response.status_code}: {response.text}"
+    )
+    body = response.json()
+    assert "movimiento" in body
+    assert "complementario" in body
+
+    mov = body["movimiento"]
+    comp = body["complementario"]
+
+    assert mov["moneda"] == "ARS", f"Principal moneda esperada ARS, obtenida: {mov['moneda']}"
+    assert mov["tipo"] == "entrada"
+    assert comp is not None, "complementario no debe ser null para par ARS"
+    assert comp["moneda"] == "ARS", f"Complementario moneda esperada ARS, obtenida: {comp['moneda']}"
+    assert comp["tipo"] == "salida"
+    assert mov["descripcion"] == comp["descripcion"]
+    assert mov["monto"] == comp["monto"]
+
+
+# ---------------------------------------------------------------------------
+# T008 — TDD: Entrada USD simple (registrar_complementario=False) retorna
+#         complementario=null (el diálogo ya no existe en backend).
+#         Este test verifica que el backend no crea complementario cuando
+#         registrar_complementario=False (sin cambio de comportamiento).
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_post_entrada_usd_sin_complementario_returns_null(
+    client: AsyncClient,
+    secretaria_headers: dict[str, str],
+) -> None:
+    """
+    POST entrada USD con registrar_complementario=False (o sin el campo)
+    debe retornar complementario=null.
+
+    T008 — TDD: valida que registrar_complementario=False sigue sin crear par.
+    Este test debe PASAR ya desde T001 (comportamiento existente sin cambio).
+    """
+    caja_id = 4
+    suffix = uuid4().hex[:8]
+    payload = {
+        "descripcion": f"USD simple {suffix}",
+        "monto": "200.00",
+        "tipo": "entrada",
+        "moneda": "USD",
+        "registrar_complementario": False,
+    }
+
+    response = await client.post(
+        f"/api/v1/cajas/{caja_id}/movimientos",
+        json=payload,
+        headers=secretaria_headers,
+    )
+
+    assert response.status_code == 201, (
+        f"Esperado 201, obtenido {response.status_code}: {response.text}"
+    )
+    body = response.json()
+    assert body["complementario"] is None, (
+        f"complementario debe ser null cuando registrar_complementario=False, "
+        f"obtenido: {body['complementario']}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# T024–T026 — TDD: fecha_manual en endpoint POST movimientos (US3/feature 009)
+#
+# Estos tests deben FALLAR hasta que T027–T033 implementen:
+#   - T027: campo fecha_manual en CreateMovimientoRequest
+#   - T028: parámetro fecha_override en create_movimiento service
+#   - T032: router calcula fecha_override desde fecha_manual a 09:00 AR
+#   - T033: movimiento_to_response retorna fecha = fecha_override or created_at
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_post_movimiento_con_fecha_manual_retorna_fecha_09_00(
+    client: AsyncClient,
+    secretaria_headers: dict[str, str],
+) -> None:
+    """T024: POST con fecha_manual='2026-09-01' → response fecha='2026-09-01T09:00:00-03:00'."""
+    caja_id = 5
+    suffix = uuid4().hex[:8]
+
+    response = await client.post(
+        f"/api/v1/cajas/{caja_id}/movimientos",
+        json={
+            "descripcion": f"Movimiento fecha manual {suffix}",
+            "monto": "500.00",
+            "tipo": "entrada",
+            "moneda": "ARS",
+            "fecha_manual": "2026-09-01",
+        },
+        headers=secretaria_headers,
+    )
+
+    assert response.status_code == 201, (
+        f"Esperado 201, obtenido {response.status_code}: {response.text}"
+    )
+    body = response.json()
+    fecha = body["movimiento"]["fecha"]
+    assert fecha == "2026-09-01T09:00:00-03:00", (
+        f"fecha esperado '2026-09-01T09:00:00-03:00', obtenido '{fecha}'"
+    )
+
+
+@pytest.mark.asyncio
+async def test_post_movimiento_sin_fecha_manual_retorna_created_at(
+    client: AsyncClient,
+    secretaria_headers: dict[str, str],
+) -> None:
+    """T025: POST sin fecha_manual → response fecha igual al created_at del servidor (sin regresión)."""
+    caja_id = 5
+    suffix = uuid4().hex[:8]
+
+    response = await client.post(
+        f"/api/v1/cajas/{caja_id}/movimientos",
+        json={
+            "descripcion": f"Movimiento sin fecha manual {suffix}",
+            "monto": "300.00",
+            "tipo": "entrada",
+            "moneda": "ARS",
+        },
+        headers=secretaria_headers,
+    )
+
+    assert response.status_code == 201, (
+        f"Esperado 201, obtenido {response.status_code}: {response.text}"
+    )
+    body = response.json()
+    fecha = body["movimiento"]["fecha"]
+    # Debe ser una fecha ISO válida (no None, no vacía) y NO ser 09:00:00-03:00
+    # (porque no es una fecha manual fija sino el timestamp del servidor)
+    assert fecha is not None and len(fecha) > 0, "fecha no debe ser nula ni vacía"
+    # Sin fecha_manual, el campo fecha no debe tener la hora fija de las 09:00
+    # (en un entorno de test corriendo a otra hora)
+    # Validamos que al menos sea parseable como ISO 8601
+    from datetime import datetime
+    parsed = datetime.fromisoformat(fecha)
+    assert parsed is not None, f"fecha no es ISO 8601 válido: {fecha}"
+
+
+@pytest.mark.asyncio
+async def test_post_par_con_fecha_manual_ambos_movimientos_tienen_misma_fecha(
+    client: AsyncClient,
+    secretaria_headers: dict[str, str],
+) -> None:
+    """T026: POST par + fecha_manual='2026-09-01' → ambos movimientos tienen fecha='2026-09-01T09:00:00-03:00'."""
+    caja_id = 5
+    suffix = uuid4().hex[:8]
+
+    response = await client.post(
+        f"/api/v1/cajas/{caja_id}/movimientos",
+        json={
+            "descripcion": f"Par con fecha manual {suffix}",
+            "monto": "750.00",
+            "tipo": "entrada",
+            "moneda": "USD",
+            "registrar_complementario": True,
+            "fecha_manual": "2026-09-01",
+        },
+        headers=secretaria_headers,
+    )
+
+    assert response.status_code == 201, (
+        f"Esperado 201, obtenido {response.status_code}: {response.text}"
+    )
+    body = response.json()
+    fecha_principal = body["movimiento"]["fecha"]
+    fecha_complementario = body["complementario"]["fecha"]
+
+    assert fecha_principal == "2026-09-01T09:00:00-03:00", (
+        f"Principal fecha esperado '2026-09-01T09:00:00-03:00', obtenido '{fecha_principal}'"
+    )
+    assert fecha_complementario == "2026-09-01T09:00:00-03:00", (
+        f"Complementario fecha esperado '2026-09-01T09:00:00-03:00', obtenido '{fecha_complementario}'"
+    )

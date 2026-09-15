@@ -350,12 +350,7 @@ describe("RegistroCajaPage", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: /^entrada$/i }));
 
-    // USD muestra el diálogo — confirmar para que se llame apiPost
-    await waitFor(() => {
-      expect(screen.getByText(/¿Registrar también como salida\?/i)).toBeInTheDocument();
-    });
-    fireEvent.click(screen.getByRole("button", { name: /confirmar|sí|si/i }));
-
+    // USD ya no muestra diálogo — apiPost se llama directamente (feature 009)
     await waitFor(() => {
       expect(apiPost).toHaveBeenCalledWith(
         "/api/v1/cajas/1/movimientos",

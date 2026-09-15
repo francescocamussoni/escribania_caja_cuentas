@@ -87,14 +87,23 @@ async def test_post_rejects_monto_a_vencimiento_less_than_ingresado(
 
 
 @pytest.mark.asyncio
+@patch("app.api.routes.plazos_fijos.plazo_fijo_service.today_ar", return_value=REFERENCE_TODAY)
 @patch("app.services.plazo_fijo_service.today_ar", return_value=REFERENCE_TODAY)
 async def test_get_plazos_fijos_paginated_future_before_vencidos(
-    mock_today: object,
+    mock_today_svc: object,
+    mock_today_route: object,
     client: AsyncClient,
     secretaria_headers: dict[str, str],
 ) -> None:
-    suffix = uuid4().hex[:8]
-    caja_id = 3
+    # Create a dedicated isolated caja so no other test data interferes
+    caja_resp = await client.post(
+        "/api/v1/cajas/config",
+        json={"nombre": f"Caja Orden Test {uuid4().hex[:6]}"},
+        headers=secretaria_headers,
+    )
+    assert caja_resp.status_code == 201
+    caja_id = caja_resp.json()["id"]
+
     payloads = [
         ("50000.00", "52000.00", "2026-07-01"),
         ("10000.00", "11000.00", "2026-08-15"),
@@ -121,12 +130,12 @@ async def test_get_plazos_fijos_paginated_future_before_vencidos(
     body = response.json()
     assert body["page"] == 1
     assert body["page_size"] == 20
-    assert body["total_items"] >= 4
+    assert body["total_items"] == 4
 
-    # Extract vencimientos for only the 4 items this test created (identified by suffix)
+    # Extract vencimientos for the 4 items in this isolated caja
     all_items = body["items"]
     test_fechas = {item["fecha_vencimiento"] for item in all_items}
-    # All four target dates must be present somewhere in the list
+    # All four target dates must be present
     assert "2026-08-10" in test_fechas
     assert "2026-08-15" in test_fechas
     assert "2026-07-01" in test_fechas

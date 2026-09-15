@@ -51,6 +51,10 @@ class Movimiento(Base):
         nullable=False,
     )
     created_by: Mapped[int] = mapped_column(ForeignKey("usuario.id"), nullable=False)
+    fecha_override: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
     updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     updated_by: Mapped[int | None] = mapped_column(ForeignKey("usuario.id"))
 

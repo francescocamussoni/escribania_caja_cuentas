@@ -127,18 +127,22 @@ def test_create_request_has_registrar_complementario_field() -> None:
     assert req.registrar_complementario is False
 
 
-def test_create_request_complementario_true_rejected_for_ars() -> None:
-    """registrar_complementario=True con moneda=ARS debe ser rechazado."""
+def test_create_request_complementario_true_accepted_for_ars() -> None:
+    """registrar_complementario=True con moneda=ARS DEBE ser aceptado (feature 009).
+
+    T006 — TDD: este test debe FALLAR hasta que T009 elimine validate_complementario_only_for_usd.
+    """
     from app.schemas.movimiento import CreateMovimientoRequest
 
-    with pytest.raises(ValidationError, match="complementario|ARS|moneda"):
-        CreateMovimientoRequest(
-            descripcion="Test",
-            monto="100.00",
-            tipo="entrada",
-            moneda="ARS",
-            registrar_complementario=True,
-        )
+    req = CreateMovimientoRequest(
+        descripcion="Test",
+        monto="100.00",
+        tipo="entrada",
+        moneda="ARS",
+        registrar_complementario=True,
+    )
+    assert req.registrar_complementario is True
+    assert req.moneda == "ARS"
 
 
 # ---------------------------------------------------------------------------
@@ -191,3 +195,137 @@ def test_movimiento_response_has_moneda_field() -> None:
     assert "moneda" in fields, (
         f"MovimientoResponse no tiene campo `moneda`. Campos: {list(fields.keys())}"
     )
+
+
+# ---------------------------------------------------------------------------
+# T005 — TDD: create_movimiento_pair acepta parámetro moneda (US1/feature 009)
+#
+# Estos tests deben FALLAR hasta que T010 añada parámetro `moneda` a
+# create_movimiento_pair y elimine el hardcode de "USD".
+# ---------------------------------------------------------------------------
+
+def test_create_movimiento_pair_accepts_moneda_ars() -> None:
+    """create_movimiento_pair debe aceptar moneda='ARS' sin TypeError.
+
+    T005 — TDD: FALLA hasta que T010 añada parámetro `moneda`.
+    """
+    from decimal import Decimal
+    from unittest.mock import MagicMock
+    from app.services.movimiento_service import MovimientoService
+
+    db = MagicMock()
+    db.scalar.return_value = None
+    service = MovimientoService(db=db)
+    user = MagicMock()
+    user.id = 1
+    user.rol = "secretaria"
+
+    # No debe levantar TypeError
+    principal, complementario = service.create_movimiento_pair(
+        caja_id=1,
+        descripcion="Par ARS",
+        monto=Decimal("500.00"),
+        tipo="entrada",
+        moneda="ARS",
+        user=user,
+    )
+
+    assert principal.moneda == "ARS"
+    assert complementario.moneda == "ARS"
+
+
+def test_create_movimiento_pair_ars_subtotals_correct() -> None:
+    """Par ARS: subtotales calculados correctamente en el stream ARS.
+
+    T005 — TDD: FALLA hasta que T010 pase moneda al service interno.
+    """
+    from decimal import Decimal
+    from unittest.mock import MagicMock
+    from app.services.movimiento_service import MovimientoService
+
+    db = MagicMock()
+    db.scalar.return_value = None  # stream ARS vacío
+    service = MovimientoService(db=db)
+    user = MagicMock()
+    user.id = 1
+
+    principal, complementario = service.create_movimiento_pair(
+        caja_id=2,
+        descripcion="Par ARS entrada",
+        monto=Decimal("200.00"),
+        tipo="entrada",
+        moneda="ARS",
+        user=user,
+    )
+
+    # principal: 0 + 200 = 200
+    assert principal.subtotal == Decimal("200.00")
+    # complementario (salida): la segunda llamada a scalar ve el principal como "último"
+    # Resultado depende del mock — lo que importa es que ambos tienen moneda="ARS"
+    assert principal.moneda == "ARS"
+    assert complementario.moneda == "ARS"
+    assert principal.tipo == "entrada"
+    assert complementario.tipo == "salida"
+
+
+# ---------------------------------------------------------------------------
+# T021 — TDD: CreateMovimientoRequest acepta/rechaza fecha_manual (US3/feature 009)
+#
+# Estos tests deben FALLAR hasta que T027 añada campo `fecha_manual` a
+# CreateMovimientoRequest en schemas/movimiento.py.
+# ---------------------------------------------------------------------------
+
+
+def test_create_request_accepts_valid_fecha_manual() -> None:
+    """T021: fecha_manual="2026-09-01" es un valor válido para CreateMovimientoRequest."""
+    from app.schemas.movimiento import CreateMovimientoRequest
+
+    req = CreateMovimientoRequest(
+        descripcion="Cobro",
+        monto="100.00",
+        tipo="entrada",
+        fecha_manual="2026-09-01",
+    )
+    assert req.fecha_manual == "2026-09-01"  # type: ignore[attr-defined]
+
+
+def test_create_request_accepts_none_fecha_manual() -> None:
+    """T021: fecha_manual=None (omitido) es válido — comportamiento sin regresión."""
+    from app.schemas.movimiento import CreateMovimientoRequest
+
+    req = CreateMovimientoRequest(
+        descripcion="Cobro",
+        monto="100.00",
+        tipo="entrada",
+    )
+    assert req.fecha_manual is None  # type: ignore[attr-defined]
+
+
+def test_create_request_rejects_invalid_fecha_manual() -> None:
+    """T021: fecha_manual con formato inválido lanza ValidationError."""
+    from pydantic import ValidationError
+
+    from app.schemas.movimiento import CreateMovimientoRequest
+
+    with pytest.raises(ValidationError):
+        CreateMovimientoRequest(
+            descripcion="Cobro",
+            monto="100.00",
+            tipo="entrada",
+            fecha_manual="no-es-fecha",
+        )
+
+
+def test_create_request_rejects_partial_date_format() -> None:
+    """T021: fecha_manual con formato parcial (e.g. '2026-9-1') lanza ValidationError."""
+    from pydantic import ValidationError
+
+    from app.schemas.movimiento import CreateMovimientoRequest
+
+    with pytest.raises(ValidationError):
+        CreateMovimientoRequest(
+            descripcion="Cobro",
+            monto="100.00",
+            tipo="entrada",
+            fecha_manual="2026-9-1",
+        )

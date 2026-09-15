@@ -1,5 +1,5 @@
 import re
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 from typing import Literal
 
@@ -10,6 +10,7 @@ from app.models.usuario import Usuario
 from app.schemas.caja import CajaResponse
 
 MONTO_PATTERN = re.compile(r"^\d+(\.\d{1,2})?$")
+FECHA_MANUAL_PATTERN = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
 # Shared literal for all schemas; only ARS and USD are valid currencies.
 Moneda = Literal["ARS", "USD"]
@@ -23,6 +24,7 @@ class CreateMovimientoRequest(BaseModel):
     tipo: str
     moneda: Moneda = "ARS"
     registrar_complementario: bool = False
+    fecha_manual: str | None = None  # T027: formato YYYY-MM-DD opcional (US3)
 
     @field_validator("descripcion")
     @classmethod
@@ -46,13 +48,20 @@ class CreateMovimientoRequest(BaseModel):
             raise ValueError("tipo debe ser 'entrada' o 'salida'")
         return value
 
-    @model_validator(mode="after")
-    def validate_complementario_only_for_usd(self) -> "CreateMovimientoRequest":
-        if self.registrar_complementario and self.moneda != "USD":
-            raise ValueError(
-                "registrar_complementario solo está permitido cuando moneda='USD'"
-            )
-        return self
+    @field_validator("fecha_manual")
+    @classmethod
+    def validate_fecha_manual(cls, value: str | None) -> str | None:
+        """T027: Valida que fecha_manual tenga formato estricto YYYY-MM-DD."""
+        if value is None:
+            return value
+        if not FECHA_MANUAL_PATTERN.match(value):
+            raise ValueError("fecha_manual debe tener formato YYYY-MM-DD (e.g. '2026-09-01')")
+        # Validate it's a real calendar date
+        try:
+            date.fromisoformat(value)
+        except ValueError as exc:
+            raise ValueError(f"fecha_manual no es una fecha válida: {value}") from exc
+        return value
 
 
 class UpdateMovimientoRequest(BaseModel):
@@ -139,6 +148,17 @@ def is_editable(_movimiento: Movimiento, user: Usuario) -> bool:
 
 
 def movimiento_to_response(movimiento: Movimiento, user: Usuario) -> MovimientoResponse:
+    from zoneinfo import ZoneInfo
+
+    _AR_TZ = ZoneInfo("America/Argentina/Buenos_Aires")
+
+    # T033: Return fecha_override (in AR timezone) when present; else fall back to created_at.
+    # Converts to AR timezone so the serialized offset is -03:00 (not UTC Z).
+    if movimiento.fecha_override is not None:
+        fecha = movimiento.fecha_override.astimezone(_AR_TZ)
+    else:
+        fecha = movimiento.created_at
+
     return MovimientoResponse(
         id=movimiento.id,
         descripcion=movimiento.descripcion,
@@ -146,7 +166,7 @@ def movimiento_to_response(movimiento: Movimiento, user: Usuario) -> MovimientoR
         tipo=movimiento.tipo,
         moneda=movimiento.moneda,
         subtotal=format_decimal(movimiento.subtotal),
-        fecha=movimiento.created_at,
+        fecha=fecha,
         editable=is_editable(movimiento, user),
         caja=CajaResponse.model_validate(movimiento.caja),
     )

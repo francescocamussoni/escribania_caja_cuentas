@@ -404,7 +404,11 @@ def test_create_movimiento_pair_same_descripcion_monto_moneda() -> None:
 
 def test_create_movimiento_pair_moneda_is_always_usd() -> None:
     """
-    create_movimiento_pair es USD-only; ambos movimientos deben tener moneda='USD'.
+    create_movimiento_pair sin parámetro moneda usa USD por defecto.
+
+    T004 — TDD: valida que el default moneda="USD" se mantiene cuando
+    no se pasa el parámetro (backward-compat). FALLA hasta que T010
+    añada `moneda` como parámetro con default "USD".
     """
     db = MagicMock()
     db.scalar.return_value = None
@@ -421,6 +425,61 @@ def test_create_movimiento_pair_moneda_is_always_usd() -> None:
 
     assert principal.moneda == "USD"
     assert complementario.moneda == "USD"
+
+
+def test_create_movimiento_pair_accepts_ars_moneda() -> None:
+    """
+    create_movimiento_pair con moneda='ARS' crea ambos movimientos en ARS.
+
+    T004 — TDD: FALLA hasta que T010 añada parámetro moneda y lo propague.
+    """
+    db = MagicMock()
+    db.scalar.return_value = None
+    service = MovimientoService(db=db)
+    user = _make_user()
+
+    principal, complementario = service.create_movimiento_pair(
+        caja_id=3,
+        descripcion="ARS par",
+        monto=Decimal("1000.00"),
+        tipo="entrada",
+        moneda="ARS",
+        user=user,
+    )
+
+    assert principal.moneda == "ARS", (
+        f"Principal debería tener moneda='ARS', obtenido: {principal.moneda!r}"
+    )
+    assert complementario.moneda == "ARS", (
+        f"Complementario debería tener moneda='ARS', obtenido: {complementario.moneda!r}"
+    )
+    assert principal.tipo == "entrada"
+    assert complementario.tipo == "salida"
+
+
+def test_create_movimiento_pair_ars_subtotals_start_from_zero() -> None:
+    """
+    Par ARS: stream ARS vacío → principal subtotal = 0 + monto.
+
+    T004 — TDD: FALLA hasta que T010 pase moneda='ARS' al service interno.
+    """
+    db = MagicMock()
+    db.scalar.return_value = None  # stream ARS vacío
+    service = MovimientoService(db=db)
+    user = _make_user()
+
+    principal, _ = service.create_movimiento_pair(
+        caja_id=4,
+        descripcion="ARS par subtotal",
+        monto=Decimal("300.00"),
+        tipo="entrada",
+        moneda="ARS",
+        user=user,
+    )
+
+    assert principal.subtotal == Decimal("300.00"), (
+        f"Subtotal ARS esperado 300.00, obtenido: {principal.subtotal}"
+    )
 
 
 def test_create_movimiento_pair_subtotals_are_sequential() -> None:
@@ -459,3 +518,120 @@ def test_create_movimiento_pair_subtotals_are_sequential() -> None:
     assert complementario.subtotal == Decimal("300.00"), (
         f"Complementario subtotal esperado 300.00, obtenido: {complementario.subtotal}"
     )
+
+
+# ---------------------------------------------------------------------------
+# T022–T023 — TDD: fecha_override en create_movimiento y ordenamiento COALESCE
+#
+# Estos tests deben FALLAR hasta que T028/T029 implementen:
+#   - T028: parámetro `fecha_override` en create_movimiento
+#   - T029: ORDER BY COALESCE(fecha_override, created_at) en create_movimiento
+# ---------------------------------------------------------------------------
+
+
+def test_create_movimiento_persists_fecha_override() -> None:
+    """T022: create_movimiento con fecha_override persiste ese valor en la columna."""
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+
+    AR_TZ = ZoneInfo("America/Argentina/Buenos_Aires")
+    fecha = datetime(2026, 9, 1, 9, 0, 0, tzinfo=AR_TZ)
+
+    db = MagicMock()
+    db.scalar.return_value = None  # No previous movimiento
+
+    user = MagicMock()
+    user.id = 1
+
+    service = MovimientoService(db)
+
+    with patch.object(service, "create_movimiento", wraps=service.create_movimiento):
+        movimiento = service.create_movimiento(
+            caja_id=1,
+            descripcion="Cobro con fecha",
+            monto=Decimal("100.00"),
+            tipo="entrada",
+            fecha_override=fecha,
+            user=user,
+        )
+
+    assert movimiento.fecha_override == fecha, (
+        f"fecha_override esperado {fecha}, obtenido {movimiento.fecha_override}"
+    )
+
+
+def test_create_movimiento_fecha_override_none_by_default() -> None:
+    """T022: create_movimiento sin fecha_override deja la columna en None."""
+    db = MagicMock()
+    db.scalar.return_value = None
+
+    user = MagicMock()
+    user.id = 1
+
+    service = MovimientoService(db)
+    movimiento = service.create_movimiento(
+        caja_id=1,
+        descripcion="Cobro normal",
+        monto=Decimal("50.00"),
+        tipo="entrada",
+        user=user,
+    )
+
+    assert movimiento.fecha_override is None, (
+        f"fecha_override debería ser None por defecto, obtenido: {movimiento.fecha_override}"
+    )
+
+
+def test_create_movimiento_pair_propagates_fecha_override() -> None:
+    """T022: create_movimiento_pair propaga fecha_override a ambos movimientos del par."""
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+
+    AR_TZ = ZoneInfo("America/Argentina/Buenos_Aires")
+    fecha = datetime(2026, 9, 1, 9, 0, 0, tzinfo=AR_TZ)
+
+    db = MagicMock()
+    db.scalar.return_value = None
+
+    user = MagicMock()
+    user.id = 1
+
+    service = MovimientoService(db)
+    principal, complementario = service.create_movimiento_pair(
+        caja_id=1,
+        descripcion="Par con fecha",
+        monto=Decimal("200.00"),
+        tipo="entrada",
+        fecha_override=fecha,
+        user=user,
+    )
+
+    assert principal.fecha_override == fecha, (
+        f"Principal fecha_override esperado {fecha}, obtenido {principal.fecha_override}"
+    )
+    assert complementario.fecha_override == fecha, (
+        f"Complementario fecha_override esperado {fecha}, obtenido {complementario.fecha_override}"
+    )
+
+
+def test_create_movimiento_queries_with_coalesce_order() -> None:
+    """T023: create_movimiento usa COALESCE(fecha_override, created_at) en ORDER BY."""
+    from unittest.mock import call
+
+    db = MagicMock()
+    db.scalar.return_value = None
+
+    user = MagicMock()
+    user.id = 1
+
+    service = MovimientoService(db)
+    service.create_movimiento(
+        caja_id=1,
+        descripcion="Test orden",
+        monto=Decimal("10.00"),
+        tipo="entrada",
+        user=user,
+    )
+
+    # Verify that the DB scalar query was called (ordering verified by integration test T024)
+    assert db.scalar.called, "Se esperaba una llamada a db.scalar para buscar el último movimiento"

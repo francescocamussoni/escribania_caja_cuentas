@@ -152,6 +152,8 @@ export type CreateMovimientoPayload = {
   tipo: "entrada" | "salida";
   moneda?: "ARS" | "USD";
   registrar_complementario?: boolean;
+  // T039 (US3): Fecha manual opcional — formato YYYY-MM-DD
+  fecha_manual?: string;
 };
 
 export type UpdateMovimientoPayload = {

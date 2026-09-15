@@ -445,7 +445,7 @@ select {
 
 .movimiento-form {
   display: grid;
-  grid-template-columns: minmax(12rem, 2fr) minmax(8rem, 1fr) minmax(5rem, auto) auto auto;
+  grid-template-columns: minmax(12rem, 2fr) minmax(8rem, 1fr) minmax(5rem, auto) minmax(9rem, auto) auto auto auto;
   gap: 1rem;
   align-items: end;
   padding: 1.25rem;
@@ -473,7 +473,8 @@ select {
 
   .movimiento-form__descripcion,
   .movimiento-form__monto,
-  .movimiento-form__moneda {
+  .movimiento-form__moneda,
+  .movimiento-form__fecha {
     grid-column: 1 / -1;
   }
 
@@ -566,6 +567,11 @@ select {
 
 .btn-entrada {
   background: var(--color-success);
+  color: #fff;
+}
+
+.btn-entrada-salida {
+  background: #5b3fa8;
   color: #fff;
 }
 

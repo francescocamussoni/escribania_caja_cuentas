@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 from decimal import Decimal
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.models.movimiento import Movimiento
@@ -34,17 +34,21 @@ class MovimientoService:
         monto: Decimal,
         tipo: str,
         moneda: str = "ARS",
+        fecha_override: datetime | None = None,  # T028: fecha manual a 09:00 AR (US3)
         user: Usuario,
     ) -> Movimiento:
         cleaned_description = descripcion.strip()
         if not cleaned_description:
             raise ValueError("descripcion no puede estar vacía")
 
-        # Lock and fetch the last row of the *same currency stream* only.
+        # T029: Lock and fetch the last row of the *same currency stream* only,
+        # ordered by COALESCE(fecha_override, created_at) DESC so that movements
+        # with an explicit fecha_override are correctly positioned in the stream.
+        effective_date = func.coalesce(Movimiento.fecha_override, Movimiento.created_at)
         last_movimiento = self.db.scalar(
             select(Movimiento)
             .where(Movimiento.caja_id == caja_id, Movimiento.moneda == moneda)
-            .order_by(Movimiento.created_at.desc(), Movimiento.id.desc())
+            .order_by(effective_date.desc(), Movimiento.id.desc())
             .with_for_update()
         )
         previous = last_movimiento.subtotal if last_movimiento else Decimal("0")
@@ -58,6 +62,7 @@ class MovimientoService:
             moneda=moneda,
             subtotal=subtotal,
             created_by=user.id,
+            fecha_override=fecha_override,  # T028: persisted; None keeps original behavior
         )
         self.db.add(movimiento)
         self.db.flush()
@@ -71,19 +76,25 @@ class MovimientoService:
         descripcion: str,
         monto: Decimal,
         tipo: str,
+        moneda: str = "USD",
+        fecha_override: datetime | None = None,  # T031: propagado a ambos movimientos
         user: "Usuario",
     ) -> "tuple[Movimiento, Movimiento]":
         """
-        Create an atomic pair of USD movimientos with opposite tipos.
+        Create an atomic pair of movimientos with opposite tipos in the same currency.
         Both are flushed in the same transaction; the caller must commit.
         Returns (principal, complementario).
+
+        `moneda` defaults to "USD" for backward-compatibility but accepts "ARS" as well.
+        `fecha_override` is propagated to both movements when provided (US3).
         """
         principal = self.create_movimiento(
             caja_id=caja_id,
             descripcion=descripcion,
             monto=monto,
             tipo=tipo,
-            moneda="USD",
+            moneda=moneda,
+            fecha_override=fecha_override,
             user=user,
         )
         complementario_tipo = "salida" if tipo == "entrada" else "entrada"
@@ -92,17 +103,23 @@ class MovimientoService:
             descripcion=principal.descripcion,
             monto=monto,
             tipo=complementario_tipo,
-            moneda="USD",
+            moneda=moneda,
+            fecha_override=fecha_override,
             user=user,
         )
         return principal, complementario
 
     def recalculate_subtotals(self, caja_id: int, moneda: str = "ARS") -> None:
-        """Recalculate subtotals for a single currency stream (caja_id, moneda)."""
+        """Recalculate subtotals for a single currency stream (caja_id, moneda).
+
+        T030: ORDER BY COALESCE(fecha_override, created_at) ASC so that movements
+        with explicit fecha_override are replayed in the correct business order.
+        """
+        effective_date = func.coalesce(Movimiento.fecha_override, Movimiento.created_at)
         movimientos = self.db.scalars(
             select(Movimiento)
             .where(Movimiento.caja_id == caja_id, Movimiento.moneda == moneda)
-            .order_by(Movimiento.created_at.asc(), Movimiento.id.asc())
+            .order_by(effective_date.asc(), Movimiento.id.asc())
             .with_for_update()
         ).all()
 
