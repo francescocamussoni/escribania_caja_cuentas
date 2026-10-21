@@ -1,0 +1,496 @@
+openapi: 3.0.0
+info:
+  title: Escribanía Cajas API — Delta 010-cheques-instrumento
+  description: |
+    Este documento describe **únicamente los cambios** al contrato de API existente
+    introducidos por la feature 010-cheques-instrumento (Instrumento Cheque/Echeque,
+    liquidación, sección Cheques, saldo a futuro e informe de impresión).
+
+    Convenciones:
+    - Todas las rutas requieren `Authorization: Bearer <JWT>`.
+    - Escritura (crear, editar, eliminar, liquidar) → rol `secretaria` (403 para `escribano`).
+    - Lectura → `secretaria` y `escribano`.
+    - "Hoy" y "este mes" se evalúan en zona horaria `America/Argentina/Buenos_Aires`.
+    - Los errores no exponen trazas ni detalles internos.
+  version: "010"
+
+paths:
+  /api/v1/cajas/{caja_id}/movimientos:
+    get:
+      summary: Listar movimientos que impactan el saldo (CAMBIO)
+      description: |
+        **Cambios:**
+        1. Devuelve **solo** movimientos que impactan el saldo: comunes (`instrumento = ninguno`)
+           y cheques **liquidados**. Los cheques pendientes se consultan en
+           `GET /api/v1/cajas/{caja_id}/cheques-pendientes`.
+        2. Orden y filtros `fecha_desde` / `fecha_hasta` por **fecha efectiva**
+           (`fecha_liquidado` ▸ `fecha_override` ▸ `created_at`), en fecha de Argentina.
+        3. Sin cambios en paginación (`page_size` fijo 20) ni en el filtro `moneda`.
+      operationId: listMovimientos
+      tags: [movimientos]
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: caja_id, in: path, required: true, schema: { type: integer } }
+        - { name: page, in: query, schema: { type: integer, minimum: 1, default: 1 } }
+        - { name: page_size, in: query, schema: { type: integer, enum: [20], default: 20 } }
+        - { name: moneda, in: query, schema: { type: string, enum: [ARS, USD] } }
+        - { name: fecha_desde, in: query, schema: { type: string, format: date } }
+        - { name: fecha_hasta, in: query, schema: { type: string, format: date } }
+      responses:
+        '200':
+          description: Página de movimientos
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedMovimientosResponse'
+        '400': { description: page_size o rango de fechas inválido }
+        '401': { description: No autenticado }
+        '404': { description: Caja no encontrada }
+
+    post:
+      summary: Crear movimiento o cheque/echeque pendiente (CAMBIO)
+      description: |
+        **Cambios respecto a v009:**
+        1. Nuevo campo `instrumento` (`ninguno` por defecto). Con `ninguno` el comportamiento es
+           **idéntico** al anterior.
+        2. Con `instrumento = cheque | echeque`:
+           - `fecha_liquidacion` es **obligatoria** y debe ser **estrictamente posterior a hoy**.
+           - El registro se crea como cheque **pendiente**: `subtotal = null` y **no** impacta
+             el saldo de la caja/moneda.
+           - `registrar_complementario` debe ser `false` (no hay "Entrada y Salida" para cheques).
+           - `fecha_manual` (si se informa) pasa a ser la **fecha de carga** del cheque.
+        3. Con `instrumento = ninguno`, `fecha_liquidacion` no debe enviarse.
+      operationId: createMovimiento
+      tags: [movimientos]
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: caja_id, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateMovimientoRequest'
+            examples:
+              movimiento_comun:
+                summary: Sin instrumento (sin cambios)
+                value:
+                  descripcion: "Honorarios escritura"
+                  monto: "15000.00"
+                  tipo: "entrada"
+                  moneda: "ARS"
+              cheque_recibido:
+                summary: Cheque recibido (entrada), pendiente de liquidar
+                value:
+                  descripcion: "Cheque Banco Nación 0001234"
+                  monto: "500.00"
+                  tipo: "entrada"
+                  moneda: "ARS"
+                  instrumento: "cheque"
+                  fecha_liquidacion: "2026-11-15"
+              echeque_emitido:
+                summary: Echeque emitido (salida) con fecha de carga manual
+                value:
+                  descripcion: "Echeque proveedor"
+                  monto: "200.00"
+                  tipo: "salida"
+                  moneda: "ARS"
+                  instrumento: "echeque"
+                  fecha_liquidacion: "2026-12-01"
+                  fecha_manual: "2026-10-20"
+      responses:
+        '201':
+          description: Movimiento (o cheque pendiente) creado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MovimientoCreateResponse'
+        '400': { description: Validación de servicio fallida }
+        '401': { description: No autenticado }
+        '403': { description: Rol insuficiente (requiere secretaria) }
+        '404': { description: Caja no encontrada }
+        '422':
+          description: |
+            Validación de esquema: `fecha_liquidacion` ausente con cheque, presente sin cheque,
+            vacía, con formato inválido o **igual/anterior a hoy**; `registrar_complementario = true`
+            con cheque; monto/tipo inválidos.
+
+  /api/v1/cajas/{caja_id}/movimientos/{movimiento_id}:
+    patch:
+      summary: Editar movimiento o cheque (CAMBIO)
+      description: |
+        **Cambios:**
+        - Nuevos campos opcionales `instrumento` (**solo** `cheque` o `echeque`) y `fecha_liquidacion`.
+        - Enviar `instrumento = "ninguno"` → 422 (no se permite pasar un cheque a "-").
+        - Enviar `instrumento` o `fecha_liquidacion` sobre un movimiento **común** → 400
+          (no se convierte un movimiento común en cheque; se elimina y se vuelve a cargar).
+        - `fecha_liquidacion` solo es editable en cheques **pendientes** (400 si ya está liquidado)
+          y debe ser > hoy (422).
+        - Editar un cheque **pendiente** no recalcula subtotales. Editar un cheque **liquidado**
+          aplica las reglas actuales (recálculo en cascada de la caja y moneda).
+      operationId: updateMovimiento
+      tags: [movimientos]
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: caja_id, in: path, required: true, schema: { type: integer } }
+        - { name: movimiento_id, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateMovimientoRequest'
+      responses:
+        '200':
+          description: Movimiento actualizado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MovimientoResponse'
+        '400': { description: Regla de servicio incumplida (ver descripción) }
+        '401': { description: No autenticado }
+        '403': { description: Rol insuficiente (requiere secretaria) }
+        '404': { description: Caja o movimiento no encontrado }
+        '422': { description: Validación de esquema (incluye instrumento "ninguno" y fecha_liquidacion <= hoy) }
+
+    delete:
+      summary: Eliminar movimiento o cheque (CAMBIO)
+      description: |
+        Eliminar un cheque **pendiente** no recalcula subtotales. Eliminar un movimiento que
+        impacta el saldo (común o cheque liquidado) mantiene el recálculo actual.
+      operationId: deleteMovimiento
+      tags: [movimientos]
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: caja_id, in: path, required: true, schema: { type: integer } }
+        - { name: movimiento_id, in: path, required: true, schema: { type: integer } }
+      responses:
+        '204': { description: Eliminado }
+        '401': { description: No autenticado }
+        '403': { description: Rol insuficiente (requiere secretaria) }
+        '404': { description: Caja o movimiento no encontrado }
+
+  /api/v1/cajas/{caja_id}/movimientos/{movimiento_id}/liquidar:
+    post:
+      summary: Liquidar un cheque/echeque pendiente (NUEVO)
+      description: |
+        Registra `fecha_liquidado = ahora`, cambia el estado a **liquidado** e incorpora el monto
+        al saldo de la caja y moneda (entrada suma, salida resta). El cheque queda ubicado en el
+        historial según su fecha liquidado. La operación es **atómica**: ante error el cheque
+        permanece pendiente y el saldo no cambia.
+
+        Sin cuerpo de request. Idempotencia: una segunda liquidación del mismo cheque responde
+        `409` y **no** duplica el impacto en el saldo.
+      operationId: liquidarCheque
+      tags: [cheques]
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: caja_id, in: path, required: true, schema: { type: integer } }
+        - { name: movimiento_id, in: path, required: true, schema: { type: integer } }
+      responses:
+        '200':
+          description: Cheque liquidado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MovimientoResponse'
+        '401': { description: No autenticado }
+        '403': { description: Rol insuficiente (requiere secretaria) }
+        '404': { description: Caja inexistente, o movimiento inexistente / no es un cheque }
+        '409': { description: El cheque ya está liquidado }
+        '500': { description: Error al liquidar (transacción revertida) }
+
+  /api/v1/cajas/{caja_id}/cheques-pendientes:
+    get:
+      summary: Cheques/echeques pendientes de una caja (NUEVO)
+      description: |
+        Alimenta el bloque "cheques pendientes" arriba del historial en Registro y Consulta.
+        Orden: `fecha_liquidacion ASC, id ASC`. Paginado (tamaño fijo 20).
+        `moneda`, `fecha_desde` y `fecha_hasta` filtran por **fecha de carga** (fecha de Argentina).
+      operationId: listChequesPendientesCaja
+      tags: [cheques]
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: caja_id, in: path, required: true, schema: { type: integer } }
+        - { name: page, in: query, schema: { type: integer, minimum: 1, default: 1 } }
+        - { name: moneda, in: query, schema: { type: string, enum: [ARS, USD] } }
+        - { name: fecha_desde, in: query, schema: { type: string, format: date } }
+        - { name: fecha_hasta, in: query, schema: { type: string, format: date } }
+      responses:
+        '200':
+          description: Página de cheques pendientes
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedMovimientosResponse'
+        '400': { description: Rango de fechas inválido }
+        '401': { description: No autenticado }
+        '404': { description: Caja no encontrada }
+
+  /api/v1/cajas/{caja_id}/saldo-futuro:
+    get:
+      summary: Saldo a futuro de una caja (NUEVO)
+      description: |
+        Devuelve, por moneda, el saldo al día de hoy y una fila por cada fecha de liquidación
+        distinta entre los cheques **pendientes** de la caja, con el **saldo proyectado acumulado**
+        (saldo actual + efecto neto de todos los cheques con fecha de liquidación ≤ esa fecha).
+        Los cheques con fecha de liquidación vencida (≤ hoy) se incluyen marcados `vencido = true`.
+        Cheques con la misma fecha se agrupan en una sola fila. ARS y USD son independientes.
+      operationId: getSaldoFuturo
+      tags: [cajas]
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: caja_id, in: path, required: true, schema: { type: integer } }
+      responses:
+        '200':
+          description: Proyección por moneda
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SaldoFuturoResponse'
+              example:
+                caja: { id: 1, nombre: "Bambina", slug: "bambina" }
+                fecha_calculo: "2026-10-21"
+                monedas:
+                  - moneda: "ARS"
+                    saldo_actual: "1000.00"
+                    filas:
+                      - { fecha_liquidacion: "2026-11-05", vencido: false, cheques: 1, efecto_neto: "500.00", saldo_proyectado: "1500.00" }
+                      - { fecha_liquidacion: "2026-11-20", vencido: false, cheques: 1, efecto_neto: "-200.00", saldo_proyectado: "1300.00" }
+                  - moneda: "USD"
+                    saldo_actual: "0.00"
+                    filas: []
+        '401': { description: No autenticado }
+        '404': { description: Caja no encontrada }
+
+  /api/v1/cajas/{caja_id}/saldo:
+    get:
+      summary: Saldo actual de una caja (CAMBIO interno, contrato sin cambios)
+      description: |
+        El contrato de respuesta no cambia. El saldo se calcula solo con movimientos que impactan
+        el saldo (cheques pendientes excluidos; cheques liquidados incluidos). `ultimo_movimiento_at`
+        refleja la fecha efectiva del último movimiento que impacta el saldo.
+      operationId: getCajaSaldo
+      tags: [cajas]
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: caja_id, in: path, required: true, schema: { type: integer } }
+      responses:
+        '200': { description: Saldo por moneda (sin cambios de esquema) }
+
+  /api/v1/cheques:
+    get:
+      summary: Sección Cheques — pendientes de todas las cajas (NUEVO)
+      description: |
+        Lista cheques/echeques **pendientes** de **todas** las cajas (incluidas archivadas)
+        en una de dos categorías:
+        - `aptos`: `fecha_liquidacion <= hoy`.
+        - `proximos`: `hoy < fecha_liquidacion <= último día del mes actual`.
+        Excluye liquidados y pendientes con fecha en meses posteriores.
+        Orden: `fecha_liquidacion ASC, id ASC`. Paginado (tamaño fijo 20).
+        Visible para `secretaria` y `escribano`; `liquidable` es `true` solo para secretaria.
+      operationId: listCheques
+      tags: [cheques]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: categoria
+          in: query
+          required: true
+          schema: { type: string, enum: [aptos, proximos] }
+        - { name: page, in: query, schema: { type: integer, minimum: 1, default: 1 } }
+      responses:
+        '200':
+          description: Página de cheques de la categoría
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedMovimientosResponse'
+        '401': { description: No autenticado }
+        '422': { description: categoria inválida o page < 1 }
+
+  /api/v1/informes/pdf:
+    post:
+      summary: Generar informe PDF (CAMBIO en tipo CAJA)
+      description: |
+        Request sin cambios. Para `tipo = CAJA` el PDF:
+        1. Lista solo movimientos que impactan el saldo (comunes y cheques liquidados, estos
+           últimos marcados `[Cheque]`/`[Echeque]` y con su fecha liquidado).
+        2. Agrega la sección **Cheques pendientes** de la caja (estado al momento de generar;
+           **no** se filtra por el período; no se suma a ningún saldo).
+        3. Agrega el **Saldo a futuro** por moneda (mismo cálculo que `GET .../saldo-futuro`,
+           a partir del saldo actual).
+        `tipo = PLAZO_FIJO` no cambia.
+      operationId: generateInformePdf
+      tags: [informes]
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: PDF (application/pdf)
+        '400': { description: Rango de fechas inválido }
+        '401': { description: No autenticado }
+        '404': { description: Caja no encontrada }
+
+components:
+  schemas:
+    Instrumento:
+      type: string
+      enum: [ninguno, cheque, echeque]
+
+    EstadoCheque:
+      type: string
+      enum: [pendiente, liquidado]
+      nullable: true
+
+    CreateMovimientoRequest:
+      type: object
+      required: [descripcion, monto, tipo]
+      additionalProperties: false
+      properties:
+        descripcion: { type: string, minLength: 1, maxLength: 500 }
+        monto:
+          type: string
+          pattern: '^\d+(\.\d{1,2})?$'
+        tipo: { type: string, enum: [entrada, salida] }
+        moneda: { type: string, enum: [ARS, USD], default: ARS }
+        registrar_complementario:
+          type: boolean
+          default: false
+          description: Debe ser `false` cuando `instrumento` es `cheque` o `echeque`.
+        fecha_manual:
+          type: string
+          pattern: '^\d{4}-\d{2}-\d{2}$'
+          nullable: true
+          description: Sin cambios. Con cheque/echeque es la fecha de carga.
+        instrumento:
+          allOf:
+            - $ref: '#/components/schemas/Instrumento'
+          default: ninguno
+          description: |
+            **NUEVO v010.** `ninguno` = comportamiento anterior.
+        fecha_liquidacion:
+          type: string
+          pattern: '^\d{4}-\d{2}-\d{2}$'
+          nullable: true
+          description: |
+            **NUEVO v010.** Obligatoria si `instrumento` ≠ `ninguno` (debe ser estrictamente
+            posterior a hoy en Argentina); prohibida si `instrumento` = `ninguno`.
+
+    UpdateMovimientoRequest:
+      type: object
+      additionalProperties: false
+      description: Al menos un campo es obligatorio.
+      properties:
+        descripcion: { type: string, minLength: 1, maxLength: 500 }
+        monto: { type: string, pattern: '^\d+(\.\d{1,2})?$' }
+        tipo: { type: string, enum: [entrada, salida] }
+        moneda: { type: string, enum: [ARS, USD] }
+        instrumento:
+          type: string
+          enum: [cheque, echeque]
+          description: |
+            **NUEVO v010.** Solo `cheque` ↔ `echeque`. No admite `ninguno`.
+        fecha_liquidacion:
+          type: string
+          pattern: '^\d{4}-\d{2}-\d{2}$'
+          description: |
+            **NUEVO v010.** Solo en cheques pendientes; estrictamente posterior a hoy.
+
+    MovimientoResponse:
+      type: object
+      properties:
+        id: { type: integer }
+        descripcion: { type: string }
+        monto: { type: string }
+        tipo: { type: string, enum: [entrada, salida] }
+        moneda: { type: string, enum: [ARS, USD] }
+        subtotal:
+          type: string
+          nullable: true
+          description: |
+            **CAMBIO v010.** `null` solo para cheques pendientes (no impactan el saldo).
+        fecha:
+          type: string
+          format: date-time
+          description: |
+            Fecha efectiva: `fecha_liquidado` (cheque liquidado) ▸ `fecha_override` ▸ `created_at`.
+            Para cheques pendientes equivale a `fecha_carga`.
+        editable: { type: boolean }
+        caja: { $ref: '#/components/schemas/CajaResponse' }
+        instrumento: { $ref: '#/components/schemas/Instrumento' }
+        estado: { $ref: '#/components/schemas/EstadoCheque' }
+        fecha_carga: { type: string, format: date-time }
+        fecha_liquidacion: { type: string, format: date, nullable: true }
+        fecha_liquidado: { type: string, format: date-time, nullable: true }
+        liquidable:
+          type: boolean
+          description: "`true` si el cheque está pendiente y el usuario es secretaria."
+
+    MovimientoCreateResponse:
+      type: object
+      properties:
+        movimiento: { $ref: '#/components/schemas/MovimientoResponse' }
+        complementario:
+          nullable: true
+          allOf:
+            - $ref: '#/components/schemas/MovimientoResponse'
+
+    PaginatedMovimientosResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/MovimientoResponse' }
+        page: { type: integer }
+        page_size: { type: integer }
+        total_items: { type: integer }
+        total_pages: { type: integer }
+
+    SaldoFuturoFila:
+      type: object
+      properties:
+        fecha_liquidacion: { type: string, format: date }
+        vencido: { type: boolean, description: "`true` si fecha_liquidacion <= hoy (apto para liquidar)." }
+        cheques: { type: integer, minimum: 1 }
+        efecto_neto: { type: string, description: "Σ entradas − Σ salidas de la fecha (puede ser negativo)." }
+        saldo_proyectado: { type: string, description: "Saldo actual + efecto acumulado hasta esta fila." }
+
+    SaldoFuturoMoneda:
+      type: object
+      properties:
+        moneda: { type: string, enum: [ARS, USD] }
+        saldo_actual: { type: string }
+        filas:
+          type: array
+          items: { $ref: '#/components/schemas/SaldoFuturoFila' }
+
+    SaldoFuturoResponse:
+      type: object
+      properties:
+        caja: { $ref: '#/components/schemas/CajaResponse' }
+        fecha_calculo: { type: string, format: date, description: "Hoy en Argentina." }
+        monedas:
+          type: array
+          items: { $ref: '#/components/schemas/SaldoFuturoMoneda' }
+
+    CajaResponse:
+      type: object
+      properties:
+        id: { type: integer }
+        nombre: { type: string }
+        slug: { type: string }
+
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
