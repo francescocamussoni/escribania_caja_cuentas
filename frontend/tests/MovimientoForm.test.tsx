@@ -20,7 +20,7 @@
 
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import MovimientoForm from "../src/components/MovimientoForm";
 
@@ -482,5 +482,254 @@ describe("MovimientoForm — selector de fecha manual (T035–T038)", () => {
 
     // Tras el submit exitoso, el selector debe volver a vacío
     expect(screen.getByLabelText(/fecha \(opcional\)/i)).toHaveValue("");
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// T022 — feature 010 (US1): Instrumento (Cheque / Echeque) y Fecha de liquidación
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe("MovimientoForm — instrumento cheque/echeque (T022, feature 010)", () => {
+  beforeEach(() => {
+    onSubmit.mockReset();
+    onSubmit.mockResolvedValue(undefined);
+    // "Hoy" fijo: 21/10/2026 en Argentina → mínimo de fecha de liquidación = 22/10/2026
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-10-21T15:00:00Z"));
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  function fillBasics() {
+    fireEvent.change(screen.getByLabelText(/descripción/i), {
+      target: { value: "Cheque cliente" },
+    });
+    fireEvent.change(screen.getByLabelText(/monto/i), {
+      target: { value: "500.00" },
+    });
+  }
+
+  function selectInstrumento(value: "ninguno" | "cheque" | "echeque") {
+    fireEvent.change(screen.getByLabelText(/instrumento/i), {
+      target: { value },
+    });
+  }
+
+  it("muestra un selector Instrumento con '-' por defecto, Cheque y Echeque", () => {
+    renderForm();
+
+    const select = screen.getByLabelText(/instrumento/i) as HTMLSelectElement;
+    expect(select.tagName).toBe("SELECT");
+    expect(select.value).toBe("ninguno");
+    const options = Array.from(select.options).map((o) => [o.value, o.textContent]);
+    expect(options).toEqual([
+      ["ninguno", "-"],
+      ["cheque", "Cheque"],
+      ["echeque", "Echeque"],
+    ]);
+  });
+
+  it("ubica Instrumento a la derecha de 'Fecha (opcional)' y antes de Entrada", () => {
+    renderForm();
+
+    const fecha = screen.getByLabelText(/fecha \(opcional\)/i);
+    const instrumento = screen.getByLabelText(/instrumento/i);
+    const entrada = screen.getByRole("button", { name: /^entrada$/i });
+
+    expect(
+      fecha.compareDocumentPosition(instrumento) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      instrumento.compareDocumentPosition(entrada) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  it("con '-' no muestra Fecha de liquidación y el payload es idéntico al anterior", async () => {
+    renderForm();
+    expect(screen.queryByLabelText(/fecha de liquidación/i)).not.toBeInTheDocument();
+
+    fillBasics();
+    fireEvent.click(screen.getByRole("button", { name: /^entrada$/i }));
+
+    await waitFor(() => expect(onSubmit).toHaveBeenCalled());
+    expect(onSubmit.mock.calls[0][0]).toEqual({
+      descripcion: "Cheque cliente",
+      monto: "500.00",
+      tipo: "entrada",
+      moneda: "ARS",
+      registrar_complementario: false,
+    });
+  });
+
+  it.each(["cheque", "echeque"] as const)(
+    "con %s aparece Fecha de liquidación (obligatoria, mínimo mañana)",
+    (instrumento) => {
+      renderForm();
+
+      selectInstrumento(instrumento);
+
+      const fecha = screen.getByLabelText(/fecha de liquidación/i);
+      expect(fecha).toHaveAttribute("type", "date");
+      expect(fecha).toBeRequired();
+      expect(fecha).toHaveAttribute("min", "2026-10-22");
+    },
+  );
+
+  it("descarta la fecha de liquidación al volver a '-'", () => {
+    renderForm();
+    selectInstrumento("cheque");
+    fireEvent.change(screen.getByLabelText(/fecha de liquidación/i), {
+      target: { value: "2026-11-15" },
+    });
+
+    selectInstrumento("ninguno");
+    expect(screen.queryByLabelText(/fecha de liquidación/i)).not.toBeInTheDocument();
+
+    selectInstrumento("cheque");
+    expect(screen.getByLabelText(/fecha de liquidación/i)).toHaveValue("");
+  });
+
+  it("oculta 'Entrada y Salida' cuando hay un instrumento seleccionado", () => {
+    renderForm();
+    expect(screen.getByRole("button", { name: /entrada y salida/i })).toBeInTheDocument();
+
+    selectInstrumento("echeque");
+    expect(
+      screen.queryByRole("button", { name: /entrada y salida/i }),
+    ).not.toBeInTheDocument();
+
+    selectInstrumento("ninguno");
+    expect(screen.getByRole("button", { name: /entrada y salida/i })).toBeInTheDocument();
+  });
+
+  it("envía instrumento y fecha_liquidacion al pulsar Entrada con cheque", async () => {
+    renderForm();
+    fillBasics();
+    selectInstrumento("cheque");
+    fireEvent.change(screen.getByLabelText(/fecha de liquidación/i), {
+      target: { value: "2026-11-15" },
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /^entrada$/i }));
+
+    await waitFor(() => expect(onSubmit).toHaveBeenCalled());
+    expect(onSubmit.mock.calls[0][0]).toEqual({
+      descripcion: "Cheque cliente",
+      monto: "500.00",
+      tipo: "entrada",
+      moneda: "ARS",
+      registrar_complementario: false,
+      instrumento: "cheque",
+      fecha_liquidacion: "2026-11-15",
+    });
+  });
+
+  it("envía instrumento echeque y tipo salida al pulsar Salida", async () => {
+    renderForm();
+    fillBasics();
+    selectInstrumento("echeque");
+    fireEvent.change(screen.getByLabelText(/fecha de liquidación/i), {
+      target: { value: "2026-12-01" },
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /^salida$/i }));
+
+    await waitFor(() => expect(onSubmit).toHaveBeenCalled());
+    expect(onSubmit.mock.calls[0][0]).toMatchObject({
+      tipo: "salida",
+      instrumento: "echeque",
+      fecha_liquidacion: "2026-12-01",
+      registrar_complementario: false,
+    });
+  });
+
+  it("no envía y avisa si falta la fecha de liquidación", async () => {
+    renderForm();
+    fillBasics();
+    selectInstrumento("cheque");
+
+    fireEvent.click(screen.getByRole("button", { name: /^entrada$/i }));
+
+    expect(onSubmit).not.toHaveBeenCalled();
+    expect(
+      await screen.findByText(/la fecha de liquidación es obligatoria/i),
+    ).toBeInTheDocument();
+  });
+
+  it.each(["2026-10-21", "2026-10-01"])(
+    "no envía y avisa si la fecha de liquidación (%s) no es posterior a hoy",
+    async (fecha) => {
+      renderForm();
+      fillBasics();
+      selectInstrumento("cheque");
+      fireEvent.change(screen.getByLabelText(/fecha de liquidación/i), {
+        target: { value: fecha },
+      });
+
+      fireEvent.click(screen.getByRole("button", { name: /^entrada$/i }));
+
+      expect(onSubmit).not.toHaveBeenCalled();
+      expect(
+        await screen.findByText(/la fecha de liquidación debe ser posterior a hoy/i),
+      ).toBeInTheDocument();
+    },
+  );
+
+  it("mantiene la fecha (opcional) como fecha de carga junto con el cheque", async () => {
+    renderForm();
+    fillBasics();
+    fireEvent.change(screen.getByLabelText(/fecha \(opcional\)/i), {
+      target: { value: "2026-10-15" },
+    });
+    selectInstrumento("cheque");
+    fireEvent.change(screen.getByLabelText(/fecha de liquidación/i), {
+      target: { value: "2026-11-15" },
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /^entrada$/i }));
+
+    await waitFor(() => expect(onSubmit).toHaveBeenCalled());
+    expect(onSubmit.mock.calls[0][0]).toMatchObject({
+      fecha_manual: "2026-10-15",
+      fecha_liquidacion: "2026-11-15",
+      instrumento: "cheque",
+    });
+  });
+
+  it("tras un envío exitoso vuelve a '-' y limpia la fecha de liquidación", async () => {
+    renderForm();
+    fillBasics();
+    selectInstrumento("cheque");
+    fireEvent.change(screen.getByLabelText(/fecha de liquidación/i), {
+      target: { value: "2026-11-15" },
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /^entrada$/i }));
+
+    await waitFor(() => expect(onSubmit).toHaveBeenCalled());
+    await waitFor(() => {
+      expect((screen.getByLabelText(/instrumento/i) as HTMLSelectElement).value).toBe(
+        "ninguno",
+      );
+    });
+    expect(screen.queryByLabelText(/fecha de liquidación/i)).not.toBeInTheDocument();
+  });
+
+  it("muestra el error del servidor y conserva el cheque cargado en el formulario", async () => {
+    onSubmit.mockRejectedValue(new Error("boom"));
+    renderForm();
+    fillBasics();
+    selectInstrumento("cheque");
+    fireEvent.change(screen.getByLabelText(/fecha de liquidación/i), {
+      target: { value: "2026-11-15" },
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /^entrada$/i }));
+
+    expect(await screen.findByText(/no se pudo registrar el movimiento/i)).toBeInTheDocument();
+    expect((screen.getByLabelText(/instrumento/i) as HTMLSelectElement).value).toBe("cheque");
+    expect(screen.getByLabelText(/fecha de liquidación/i)).toHaveValue("2026-11-15");
   });
 });

@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import App from "../src/App";
 
 const authState = {
-  token: "test-token",
+  token: "test-token" as string | null,
   rol: "escribano",
   username: "escribano",
   isAuthenticated: true,
@@ -25,6 +25,9 @@ vi.mock("../src/services/api", () => ({
     }
     return Promise.reject(new Error(`Unexpected path: ${path}`));
   },
+  fetchCheques: () =>
+    Promise.resolve({ items: [], page: 1, page_size: 20, total_items: 0, total_pages: 0 }),
+  liquidarCheque: vi.fn(),
   listCajasConfig: () => Promise.resolve([]),
   createCaja: vi.fn(),
   archiveCaja: vi.fn(),
@@ -37,6 +40,7 @@ describe("App routes — configuración RBAC", () => {
   beforeEach(() => {
     authState.rol = "escribano";
     authState.username = "escribano";
+    authState.isAuthenticated = true;
   });
 
   it("redirects escribano away from /configuracion", async () => {
@@ -71,5 +75,43 @@ describe("App routes — configuración RBAC", () => {
       await screen.findByRole("heading", { name: /^configuración$/i }),
     ).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /configuración/i })).toBeInTheDocument();
+  });
+});
+
+describe("App routes — /cheques (T046)", () => {
+  beforeEach(() => {
+    authState.rol = "escribano";
+    authState.username = "escribano";
+    authState.isAuthenticated = true;
+  });
+
+  it("redirects to login when there is no session", async () => {
+    authState.isAuthenticated = false;
+
+    render(
+      <MemoryRouter initialEntries={["/cheques"]}>
+        <App />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByRole("heading", { name: /escribanía barat/i })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: /^cheques$/i })).not.toBeInTheDocument();
+  });
+
+  it.each([
+    ["escribano", "escribano"],
+    ["secretaria", "admin"],
+  ])("lets %s open /cheques", async (rol, username) => {
+    authState.rol = rol;
+    authState.username = username;
+
+    render(
+      <MemoryRouter initialEntries={["/cheques"]}>
+        <App />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByRole("heading", { level: 1, name: /^cheques$/i })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Cheques" })).toBeInTheDocument();
   });
 });

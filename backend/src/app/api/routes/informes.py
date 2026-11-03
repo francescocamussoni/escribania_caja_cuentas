@@ -56,6 +56,11 @@ def generate_informe_pdf(
         saldo_cierre_usd = service.compute_saldo_cierre_by_moneda(movimientos, "USD")
         saldo_actual_ars = service.fetch_saldo_ars(payload.caja_id)
         saldo_actual_usd = service.fetch_saldo_usd(payload.caja_id)
+        # Current state (not filtered by period): pending cheques and projected balance.
+        cheques_pendientes, cheques_pendientes_total = service.fetch_cheques_pendientes(
+            payload.caja_id
+        )
+        saldo_futuro = service.fetch_saldo_futuro(payload.caja_id)
         metadata = InformeCajaMetadata(
             caja_nombre=caja.nombre,
             date_from=date_from,
@@ -69,6 +74,9 @@ def generate_informe_pdf(
             saldo_cierre_usd=saldo_cierre_usd,
             saldo_actual_ars=saldo_actual_ars,
             saldo_actual_usd=saldo_actual_usd,
+            cheques_pendientes=cheques_pendientes,
+            cheques_pendientes_total=cheques_pendientes_total,
+            saldo_futuro=saldo_futuro,
         )
     elif payload.tipo == InformeTipo.PLAZO_FIJO:
         plazos = service.fetch_plazos_informe(

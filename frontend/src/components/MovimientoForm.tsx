@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 
-import type { Caja, CreateMovimientoPayload } from "../services/api";
+import type { Caja, CreateMovimientoPayload, Instrumento } from "../services/api";
+import { hoyAr, mananaAr } from "../utils/fechas";
 import CajasAdicionalesSelector from "./CajasAdicionalesSelector";
 
 type MovimientoFormProps = {
@@ -24,6 +25,9 @@ export default function MovimientoForm({
   const [moneda, setMoneda] = useState<"ARS" | "USD">("ARS");
   // T040 (US3): Estado de fecha manual — NO se resetea al cambiar de caja (T038)
   const [fechaManual, setFechaManual] = useState("");
+  // 010: "-" (ninguno) keeps the previous behaviour; Cheque/Echeque are settled later.
+  const [instrumento, setInstrumento] = useState<Instrumento>("ninguno");
+  const [fechaLiquidacion, setFechaLiquidacion] = useState("");
   const [additionalCajaIds, setAdditionalCajaIds] = useState<number[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -36,6 +40,17 @@ export default function MovimientoForm({
     setAdditionalCajaIds([]);
     setMoneda("ARS");
   }, [activeCajaId]);
+
+  const esCheque = instrumento !== "ninguno";
+
+  function handleInstrumentoChange(next: Instrumento) {
+    setInstrumento(next);
+    if (next === "ninguno") {
+      // The liquidation date only makes sense with an instrument: discard it.
+      setFechaLiquidacion("");
+    }
+    setError(null);
+  }
 
   async function doSubmit(
     tipo: CreateMovimientoPayload["tipo"],
@@ -54,6 +69,8 @@ export default function MovimientoForm({
           registrar_complementario,
           // T042 (US3): incluir fecha_manual solo cuando tiene valor
           ...(fechaManual ? { fecha_manual: fechaManual } : {}),
+          // 010: instrumento y fecha de liquidación solo cuando corresponden
+          ...(esCheque ? { instrumento, fecha_liquidacion: fechaLiquidacion } : {}),
         },
         additionalCajaIds,
       );
@@ -61,6 +78,8 @@ export default function MovimientoForm({
       setMonto("");
       setAdditionalCajaIds([]);
       setFechaManual("");
+      setInstrumento("ninguno");
+      setFechaLiquidacion("");
     } catch {
       setError("No se pudo registrar el movimiento.");
     } finally {
@@ -73,6 +92,17 @@ export default function MovimientoForm({
     // Validate before submitting (FR-011)
     if (!descripcion.trim() || !monto.trim()) {
       return; // HTML required will handle native validation
+    }
+    if (esCheque) {
+      // The server is authoritative; this only avoids a pointless round trip.
+      if (!fechaLiquidacion) {
+        setError("La fecha de liquidación es obligatoria.");
+        return;
+      }
+      if (fechaLiquidacion <= hoyAr()) {
+        setError("La fecha de liquidación debe ser posterior a hoy.");
+        return;
+      }
     }
     void doSubmit(tipo, false);
   }
@@ -134,6 +164,41 @@ export default function MovimientoForm({
           />
         </label>
 
+        {/* 010: Instrumento — a la derecha de la fecha y antes de Entrada */}
+        <label className="field movimiento-form__instrumento" htmlFor="instrumento-select">
+          <span>Instrumento</span>
+          <select
+            id="instrumento-select"
+            name="instrumento"
+            value={instrumento}
+            disabled={isDisabled}
+            onChange={(event) => handleInstrumentoChange(event.target.value as Instrumento)}
+          >
+            <option value="ninguno">-</option>
+            <option value="cheque">Cheque</option>
+            <option value="echeque">Echeque</option>
+          </select>
+        </label>
+
+        {esCheque ? (
+          <label
+            className="field movimiento-form__fecha-liquidacion"
+            htmlFor="fecha-liquidacion-input"
+          >
+            <span>Fecha de liquidación</span>
+            <input
+              id="fecha-liquidacion-input"
+              name="fecha_liquidacion"
+              type="date"
+              value={fechaLiquidacion}
+              min={mananaAr()}
+              disabled={isDisabled}
+              onChange={(event) => setFechaLiquidacion(event.target.value)}
+              required
+            />
+          </label>
+        ) : null}
+
         <button
           type="button"
           className="button btn-entrada movimiento-form__action"
@@ -152,18 +217,21 @@ export default function MovimientoForm({
           Salida
         </button>
 
-        {/* T019: Botón "Entrada y Salida" — registra el par atómico (US1) */}
-        <button
-          type="button"
-          className="button btn-entrada-salida movimiento-form__action"
-          disabled={isDisabled}
-          onClick={() => {
-            if (!descripcion.trim() || !monto.trim()) return;
-            void doSubmit("entrada", true);
-          }}
-        >
-          Entrada y Salida
-        </button>
+        {/* T019: Botón "Entrada y Salida" — registra el par atómico (US1).
+            Un cheque/echeque no admite "Entrada y Salida" (010, FR-005). */}
+        {esCheque ? null : (
+          <button
+            type="button"
+            className="button btn-entrada-salida movimiento-form__action"
+            disabled={isDisabled}
+            onClick={() => {
+              if (!descripcion.trim() || !monto.trim()) return;
+              void doSubmit("entrada", true);
+            }}
+          >
+            Entrada y Salida
+          </button>
+        )}
 
         {error ? <p className="form-error movimiento-form__error">{error}</p> : null}
       </form>

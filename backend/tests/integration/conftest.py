@@ -1,4 +1,7 @@
+from uuid import uuid4
+
 import pytest
+from httpx import AsyncClient
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -48,3 +51,40 @@ def prepare_auth_database(db_engine) -> None:
         session.flush()
         seed_cajas(session)
         session.commit()
+
+
+# ---------------------------------------------------------------------------
+# Fixtures compartidas por los tests de cheques (feature 010)
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+async def secretaria_headers(client: AsyncClient) -> dict[str, str]:
+    response = await client.post(
+        "/api/v1/auth/login",
+        json={"username": "admin", "password": "admin"},
+    )
+    assert response.status_code == 200
+    return {"Authorization": f"Bearer {response.json()['access_token']}"}
+
+
+@pytest.fixture
+async def escribano_headers(client: AsyncClient) -> dict[str, str]:
+    response = await client.post(
+        "/api/v1/auth/login",
+        json={"username": ESCRIBANO_USERNAME, "password": ESCRIBANO_PASSWORD},
+    )
+    assert response.status_code == 200
+    return {"Authorization": f"Bearer {response.json()['access_token']}"}
+
+
+@pytest.fixture
+async def fresh_caja(client: AsyncClient, secretaria_headers: dict[str, str]) -> dict:
+    """Caja nueva y vacía por test: aísla los tests de datos que otros dejaron en la DB."""
+    response = await client.post(
+        "/api/v1/cajas/config",
+        json={"nombre": f"Cheques {uuid4().hex[:12]}"},
+        headers=secretaria_headers,
+    )
+    assert response.status_code == 201, response.text
+    return response.json()

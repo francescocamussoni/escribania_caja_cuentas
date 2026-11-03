@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -51,13 +51,42 @@ function movimientosFor(
 }
 
 const apiGet = vi.fn();
+const fetchChequesPendientes = vi.fn();
+const fetchSaldoFuturo = vi.fn();
+const fetchSaldoProyectado = vi.fn();
+
+const EMPTY_PAGE = { items: [], page: 1, page_size: 20, total_items: 0, total_pages: 0 };
 
 vi.mock("../src/services/api", () => ({
   apiGet: (...args: unknown[]) => apiGet(...args),
   apiPost: vi.fn(),
+  fetchChequesPendientes: (...args: unknown[]) => fetchChequesPendientes(...args),
+  fetchSaldoFuturo: (...args: unknown[]) => fetchSaldoFuturo(...args),
+  fetchSaldoProyectado: (...args: unknown[]) => fetchSaldoProyectado(...args),
   getAuthToken: () => "test-token",
   setAuthToken: vi.fn(),
 }));
+
+// Reset for every test in the file (including the second `describe`).
+beforeEach(() => {
+  fetchChequesPendientes.mockReset();
+  fetchChequesPendientes.mockResolvedValue(EMPTY_PAGE);
+  fetchSaldoFuturo.mockReset();
+  fetchSaldoProyectado.mockReset();
+  fetchSaldoProyectado.mockResolvedValue({
+    caja: { id: 1, nombre: "Bambina", slug: "bambina" },
+    fecha: null,
+    monedas: [],
+  });
+  fetchSaldoFuturo.mockResolvedValue({
+    caja: CAJAS[0],
+    fecha_calculo: "2026-10-21",
+    monedas: [
+      { moneda: "ARS", saldo_actual: "250.00", filas: [] },
+      { moneda: "USD", saldo_actual: "0.00", filas: [] },
+    ],
+  });
+});
 
 const authState = {
   token: "test-token",
@@ -155,6 +184,33 @@ describe("ConsultaCajaPage", () => {
     expect(screen.queryByRole("heading", { name: /valor en conjunto/i })).not.toBeInTheDocument();
   });
 
+  it("muestra Valor de caja total solo para secretaria", async () => {
+    const consultar = async () => {
+      render(
+        <MemoryRouter>
+          <ConsultaCajaPage />
+        </MemoryRouter>,
+      );
+      await waitFor(() => {
+        expect(screen.getByRole("button", { name: /consulta/i })).toBeInTheDocument();
+      });
+      fireEvent.click(screen.getByRole("button", { name: /consulta/i }));
+      await waitFor(() => {
+        expect(screen.getByRole("heading", { name: /^valor de caja$/i })).toBeInTheDocument();
+      });
+    };
+
+    await consultar();
+    expect(
+      screen.queryByRole("heading", { name: /valor de caja total/i }),
+    ).not.toBeInTheDocument();
+    cleanup();
+
+    authState.rol = "secretaria";
+    await consultar();
+    expect(screen.getByRole("heading", { name: /valor de caja total/i })).toBeInTheDocument();
+  });
+
   it("keeps single-caja layout when additional checkboxes stay unchecked", async () => {
     render(
       <MemoryRouter>
@@ -179,7 +235,7 @@ describe("ConsultaCajaPage", () => {
       expect(screen.getByText("$ 250.00")).toBeInTheDocument();
     });
 
-    expect(screen.getByRole("heading", { name: /valor de caja/i })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /^valor de caja$/i })).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: /valor en conjunto/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: /^martin$/i })).not.toBeInTheDocument();
     expect(apiGet).not.toHaveBeenCalledWith("/api/v1/cajas/2/saldo");
@@ -204,6 +260,14 @@ describe("ConsultaCajaPage", () => {
     fireEvent.click(screen.getByRole("button", { name: /consulta/i }));
   }
 
+  it("T056: la vista en conjunto no muestra Saldo a futuro", async () => {
+    await renderConsulta();
+    await markAdicionalesAndConsult();
+
+    expect(await screen.findByRole("heading", { name: /valor en conjunto/i })).toBeInTheDocument();
+    expect(screen.queryByText("Saldo a futuro")).not.toBeInTheDocument();
+  });
+
   it("loads all saldos in parallel, shows closed solapas in principal then catalog order, and fetches historial only on expand", async () => {
     await renderConsulta();
     await markAdicionalesAndConsult();
@@ -217,7 +281,7 @@ describe("ConsultaCajaPage", () => {
     expect(apiGet).not.toHaveBeenCalledWith("/api/v1/cajas/1/movimientos?page=1");
     expect(apiGet).not.toHaveBeenCalledWith("/api/v1/cajas/2/movimientos?page=1");
     expect(apiGet).not.toHaveBeenCalledWith("/api/v1/cajas/3/movimientos?page=1");
-    expect(screen.queryByRole("heading", { name: /valor de caja/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: /^valor de caja$/i })).not.toBeInTheDocument();
 
     expect(screen.getByRole("heading", { name: /valor en conjunto/i })).toBeInTheDocument();
     expect(screen.getByText("$ 345.00")).toBeInTheDocument();
@@ -311,7 +375,7 @@ describe("ConsultaCajaPage", () => {
     });
     expect(screen.queryByText("$ 250.00")).not.toBeInTheDocument();
     expect(document.querySelectorAll(".caja-consulta-solapa")).toHaveLength(0);
-    expect(screen.queryByRole("heading", { name: /valor de caja/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: /^valor de caja$/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: /valor en conjunto/i })).not.toBeInTheDocument();
   });
 
@@ -409,7 +473,7 @@ describe("ConsultaCajaPage", () => {
     expect(resumen).toHaveTextContent("$ 80.00");
     expect(resumen).toHaveTextContent("Gabriel");
     expect(resumen).toHaveTextContent("$ 904.50");
-    expect(screen.queryByRole("heading", { name: /valor de caja/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: /^valor de caja$/i })).not.toBeInTheDocument();
   });
 
   it("replaces consulta results with subtotal general and vice versa", async () => {
@@ -452,20 +516,20 @@ describe("ConsultaCajaPage", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /^consulta$/i }));
     await waitFor(() => {
-      expect(screen.getByRole("heading", { name: /valor de caja/i })).toBeInTheDocument();
+      expect(screen.getByRole("heading", { name: /^valor de caja$/i })).toBeInTheDocument();
     });
 
     fireEvent.click(screen.getByRole("button", { name: /subtotal general/i }));
     await waitFor(() => {
       expect(screen.getByRole("heading", { name: /subtotal general/i })).toBeInTheDocument();
     });
-    expect(screen.queryByRole("heading", { name: /valor de caja/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: /^valor de caja$/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: /valor en conjunto/i })).not.toBeInTheDocument();
     expect(screen.queryByText("Movimiento de prueba consulta")).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /^consulta$/i }));
     await waitFor(() => {
-      expect(screen.getByRole("heading", { name: /valor de caja/i })).toBeInTheDocument();
+      expect(screen.getByRole("heading", { name: /^valor de caja$/i })).toBeInTheDocument();
     });
     expect(screen.queryByRole("heading", { name: /subtotal general/i })).not.toBeInTheDocument();
   });
@@ -503,7 +567,7 @@ describe("ConsultaCajaPage — filtros de listado (T028)", () => {
     fireEvent.click(screen.getByRole("button", { name: /^consulta$/i }));
 
     await waitFor(() => {
-      expect(screen.getByRole("heading", { name: /valor de caja/i })).toBeInTheDocument();
+      expect(screen.getByRole("heading", { name: /^valor de caja$/i })).toBeInTheDocument();
     });
 
     const monedaFilter = screen.getByLabelText(/filtrar.*moneda|moneda.*filtro|moneda/i);
@@ -530,7 +594,7 @@ describe("ConsultaCajaPage — filtros de listado (T028)", () => {
     fireEvent.click(screen.getByRole("button", { name: /^consulta$/i }));
 
     await waitFor(() => {
-      expect(screen.getByRole("heading", { name: /valor de caja/i })).toBeInTheDocument();
+      expect(screen.getByRole("heading", { name: /^valor de caja$/i })).toBeInTheDocument();
     });
 
     expect(screen.getByLabelText(/desde/i)).toBeInTheDocument();
@@ -551,7 +615,7 @@ describe("ConsultaCajaPage — filtros de listado (T028)", () => {
     fireEvent.click(screen.getByRole("button", { name: /^consulta$/i }));
 
     await waitFor(() => {
-      expect(screen.getByRole("heading", { name: /valor de caja/i })).toBeInTheDocument();
+      expect(screen.getByRole("heading", { name: /^valor de caja$/i })).toBeInTheDocument();
     });
 
     const monedaFilter = screen.getByLabelText(/filtrar.*moneda|moneda.*filtro|moneda/i);
@@ -578,7 +642,7 @@ describe("ConsultaCajaPage — filtros de listado (T028)", () => {
     fireEvent.click(screen.getByRole("button", { name: /^consulta$/i }));
 
     await waitFor(() => {
-      expect(screen.getByRole("heading", { name: /valor de caja/i })).toBeInTheDocument();
+      expect(screen.getByRole("heading", { name: /^valor de caja$/i })).toBeInTheDocument();
     });
 
     const monedaFilter = screen.getByLabelText(/filtrar.*moneda|moneda.*filtro|moneda/i);
@@ -611,7 +675,7 @@ describe("ConsultaCajaPage — filtros de listado (T028)", () => {
     fireEvent.click(screen.getByRole("button", { name: /^consulta$/i }));
 
     await waitFor(() => {
-      expect(screen.getByRole("heading", { name: /valor de caja/i })).toBeInTheDocument();
+      expect(screen.getByRole("heading", { name: /^valor de caja$/i })).toBeInTheDocument();
       expect(screen.getByText("$ 250.00")).toBeInTheDocument();
     });
 
@@ -626,5 +690,180 @@ describe("ConsultaCajaPage — filtros de listado (T028)", () => {
     // El saldo ARS sigue mostrando $ 250.00 (no fue refiltrado)
     expect(screen.getByText("$ 250.00")).toBeInTheDocument();
   });
+  // -----------------------------------------------------------------------
+  // T024 — feature 010 (US1): bloque de cheques pendientes en solo lectura
+  // -----------------------------------------------------------------------
+
+  const chequePendiente = {
+    id: 601,
+    descripcion: "Cheque pendiente consulta",
+    monto: "300.00",
+    tipo: "salida" as const,
+    moneda: "ARS" as const,
+    subtotal: null,
+    fecha: "2026-10-20T12:00:00-03:00",
+    editable: false,
+    caja: CAJAS[0],
+    instrumento: "echeque" as const,
+    estado: "pendiente" as const,
+    fecha_carga: "2026-10-20T12:00:00-03:00",
+    fecha_liquidacion: "2026-11-15",
+    fecha_liquidado: null,
+    liquidable: false,
+  };
+
+  it.each(["escribano", "secretaria"])(
+    "T024: Consulta muestra el bloque de cheques pendientes sin acciones (%s)",
+    async (rol) => {
+      authState.rol = rol;
+      fetchChequesPendientes.mockResolvedValue({
+        ...EMPTY_PAGE,
+        items: [chequePendiente],
+        total_items: 1,
+        total_pages: 1,
+      });
+
+      render(
+        <MemoryRouter>
+          <ConsultaCajaPage />
+        </MemoryRouter>,
+      );
+      await waitFor(() => {
+        expect(screen.getByText("Bambina")).toBeInTheDocument();
+      });
+      fireEvent.click(screen.getByRole("button", { name: /^consulta$/i }));
+
+      expect(await screen.findByText("Cheque pendiente consulta")).toBeInTheDocument();
+      expect(fetchChequesPendientes).toHaveBeenCalledWith(1, 1, {});
+
+      const bloque = document.querySelector('[data-block="cheques-pendientes"]') as HTMLElement;
+      expect(bloque).not.toBeNull();
+      expect(
+        within(bloque).queryByRole("button", { name: /liquidar|editar|eliminar/i }),
+      ).not.toBeInTheDocument();
+      const historial = document.querySelector('[data-block="historial"]');
+      expect(
+        bloque.compareDocumentPosition(historial!) & Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+    },
+  );
+
+  it("T024: Consulta no pide cheques pendientes antes de consultar", async () => {
+    render(
+      <MemoryRouter>
+        <ConsultaCajaPage />
+      </MemoryRouter>,
+    );
+    await waitFor(() => {
+      expect(screen.getByText("Bambina")).toBeInTheDocument();
+    });
+
+    expect(fetchChequesPendientes).not.toHaveBeenCalled();
+  });
+
+  // -----------------------------------------------------------------------
+  // T056 — feature 010 (US4): Saldo a futuro dentro de "Valor de caja"
+  // -----------------------------------------------------------------------
+
+  it.each(["escribano", "secretaria"])(
+    "T056: Consulta (una caja) muestra el desplegable Saldo a futuro dentro de Valor de caja (%s)",
+    async (rol) => {
+      authState.rol = rol;
+      render(
+        <MemoryRouter>
+          <ConsultaCajaPage />
+        </MemoryRouter>,
+      );
+      await waitFor(() => {
+        expect(screen.getByText("Bambina")).toBeInTheDocument();
+      });
+      expect(screen.queryByText("Saldo a futuro")).not.toBeInTheDocument();
+
+      fireEvent.click(screen.getByRole("button", { name: /^consulta$/i }));
+
+      const resumen = await screen.findByText("Saldo a futuro");
+      const panel = document.querySelector('[data-block="saldo"]') as HTMLElement;
+      expect(panel).not.toBeNull();
+      expect(panel).toContainElement(resumen);
+      expect(within(panel).getByText("Valor de caja")).toBeInTheDocument();
+      // Banner ARS/USD sin cambios
+      expect(panel.querySelectorAll(".saldo-dual .saldo-valor")).toHaveLength(2);
+      expect(resumen.closest("details")).not.toHaveAttribute("open");
+      expect(fetchSaldoFuturo).not.toHaveBeenCalled();
+
+      fireEvent.click(resumen);
+      await waitFor(() => expect(fetchSaldoFuturo).toHaveBeenCalledWith(1));
+    },
+  );
 });
 
+
+
+// ---------------------------------------------------------------------------
+// T024 / T031 — MovimientoTable: subtotal nulo y cheques liquidados
+// ---------------------------------------------------------------------------
+
+import MovimientoTable from "../src/components/MovimientoTable";
+
+describe("MovimientoTable — cheques (feature 010)", () => {
+  const base = {
+    id: 1,
+    descripcion: "Fila de prueba",
+    monto: "100.00",
+    tipo: "entrada" as const,
+    moneda: "ARS" as const,
+    subtotal: "100.00",
+    fecha: "2026-10-20T12:00:00-03:00",
+    editable: false,
+    caja: CAJAS[0],
+    instrumento: "ninguno" as const,
+    estado: null,
+    fecha_carga: "2026-10-20T12:00:00-03:00",
+    fecha_liquidacion: null,
+    fecha_liquidado: null,
+    liquidable: false,
+  };
+
+  it("tolera subtotal null sin romper ni mostrar 'null'", () => {
+    render(<MovimientoTable movimientos={[{ ...base, subtotal: null }]} />);
+
+    expect(screen.getByText("Fila de prueba")).toBeInTheDocument();
+    expect(screen.queryByText("null")).not.toBeInTheDocument();
+  });
+
+  it("marca los cheques liquidados con instrumento y estado, y no marca los comunes", () => {
+    render(
+      <MovimientoTable
+        movimientos={[
+          { ...base, id: 1, descripcion: "Movimiento común" },
+          {
+            ...base,
+            id: 2,
+            descripcion: "Cheque liquidado",
+            instrumento: "cheque",
+            estado: "liquidado",
+            fecha_liquidacion: "2026-11-15",
+            fecha_liquidado: "2026-10-21T10:00:00-03:00",
+          },
+          {
+            ...base,
+            id: 3,
+            descripcion: "Echeque liquidado",
+            instrumento: "echeque",
+            estado: "liquidado",
+            fecha_liquidacion: "2026-11-15",
+            fecha_liquidado: "2026-10-21T10:00:00-03:00",
+          },
+        ]}
+      />,
+    );
+
+    const rows = screen.getAllByRole("row").slice(1);
+    expect(within(rows[0]).queryByText(/^(Cheque|Echeque)$/)).not.toBeInTheDocument();
+    expect(within(rows[0]).queryByText("Liquidado")).not.toBeInTheDocument();
+    expect(within(rows[1]).getByText("Cheque")).toBeInTheDocument();
+    expect(within(rows[1]).getByText("Liquidado")).toBeInTheDocument();
+    expect(within(rows[2]).getByText("Echeque")).toBeInTheDocument();
+    expect(within(rows[2]).getByText("Liquidado")).toBeInTheDocument();
+  });
+});

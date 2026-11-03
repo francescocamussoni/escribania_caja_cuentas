@@ -9,8 +9,8 @@ from sqlalchemy.orm import Session
 from app.core.logging import get_logger, log_security_event
 from app.models.caja import Caja
 from app.models.evento_configuracion_caja import EventoConfiguracionCaja
-from app.models.movimiento import Movimiento
 from app.models.usuario import Usuario
+from app.services.saldo_service import get_saldos_cajas
 
 CAJA_ESTADO_ACTIVA = "activa"
 CAJA_ESTADO_ARCHIVADA = "archivada"
@@ -211,23 +211,6 @@ def list_cajas_config(db: Session) -> list[Caja]:
 
 def list_saldos_cajas_activas(db: Session) -> list[tuple[Caja, Decimal, Decimal]]:
     """Return (caja, saldo_ars, saldo_usd) for each active caja."""
-    rows: list[tuple[Caja, Decimal, Decimal]] = []
-    for caja in list_cajas_activas(db):
-        last_ars = db.scalar(
-            select(Movimiento.subtotal)
-            .where(Movimiento.caja_id == caja.id, Movimiento.moneda == "ARS")
-            .order_by(Movimiento.created_at.desc(), Movimiento.id.desc())
-            .limit(1)
-        )
-        last_usd = db.scalar(
-            select(Movimiento.subtotal)
-            .where(Movimiento.caja_id == caja.id, Movimiento.moneda == "USD")
-            .order_by(Movimiento.created_at.desc(), Movimiento.id.desc())
-            .limit(1)
-        )
-        rows.append((
-            caja,
-            last_ars if last_ars is not None else Decimal("0.00"),
-            last_usd if last_usd is not None else Decimal("0.00"),
-        ))
-    return rows
+    cajas = list_cajas_activas(db)
+    saldos = get_saldos_cajas(db, [caja.id for caja in cajas])
+    return [(caja, *saldos[caja.id]) for caja in cajas]

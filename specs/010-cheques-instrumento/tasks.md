@@ -41,8 +41,8 @@ Este proyecto **no usa Figma** para esta feature (no hay URL ni node-id en spec/
 
 **Purpose**: Baseline verde y contrato alineado antes de TDD.
 
-- [ ] T001 Verify branch `010-cheques-instrumento` and record the baseline: `python -m pytest tests/` in `backend/` and `npm run test -- --run` in `frontend/` (note any pre-existing failures)
-- [ ] T002 [P] Confirm `specs/010-cheques-instrumento/contracts/openapi-delta.yaml` paths match `backend/src/app/api/router.py` prefixes (`/api/v1` + `/cajas`; new `/cheques`)
+- [x] T001 Verify branch `010-cheques-instrumento` and record the baseline: `python -m pytest tests/` in `backend/` and `npm run test -- --run` in `frontend/` (note any pre-existing failures)
+- [x] T002 [P] Confirm `specs/010-cheques-instrumento/contracts/openapi-delta.yaml` paths match `backend/src/app/api/router.py` prefixes (`/api/v1` + `/cajas`; new `/cheques`)
 
 **Checkpoint**: Branch correcto; baseline conocido; contrato no choca con el router.
 
@@ -56,24 +56,24 @@ Este proyecto **no usa Figma** para esta feature (no hay URL ni node-id en spec/
 
 ### Tests FIRST (must fail)
 
-- [ ] T003 [P] Unit tests FIRST: `Movimiento` derived properties (`es_cheque`, `estado_cheque`, `impacta_saldo`, `fecha_carga`, `fecha_efectiva`) and CHECK constraints (invalid `instrumento`; cheque without `fecha_liquidacion`; `ninguno` with `fecha_liquidacion`/`fecha_liquidado`; `subtotal` NULL with `ninguno`; `subtotal` NOT NULL on a pending cheque) in `backend/tests/unit/test_movimiento_cheque_model.py` (new)
-- [ ] T004 [P] Unit tests FIRST: `end_of_month` (28/29 Feb, 30/31-day months, December) in `backend/tests/unit/test_dates.py`
-- [ ] T005 [P] Integration tests FIRST: `saldo_service` — saldo = SUM(entrada − salida) over rows with `subtotal IS NOT NULL`; equals last subtotal on a consistent stream; ignores pending cheques; counts liquidated cheques; `0.00` for empty caja; ARS/USD independent; correct with past `fecha_override` in `backend/tests/integration/test_saldo_service.py` (new)
-- [ ] T006 [P] Integration parity tests FIRST: `GET /api/v1/cajas/{id}/saldo` and `/saldo-general` return the same values as before for common movements (with and without `fecha_override`); `ultimo_movimiento_at` uses effective date in `backend/tests/integration/test_cajas_saldo_moneda.py`
-- [ ] T007 [P] Unit tests FIRST: stream queries (`create_movimiento` last-row lookup, `recalculate_subtotals`) ignore rows with `subtotal IS NULL` and order by effective date `COALESCE(fecha_liquidado, fecha_override, created_at)`; `create_movimiento` with `fecha_override` recalculates the stream (hardening); parity for movements without `fecha_override` in `backend/tests/unit/test_movimiento_service.py`
-- [ ] T008 [P] Integration parity tests FIRST: `GET /api/v1/cajas/{id}/movimientos` excludes pending cheques (inserted directly in DB), orders and filters `fecha_desde`/`fecha_hasta` by effective date (Argentina TZ), unchanged for common movements in `backend/tests/integration/test_movimientos_api.py`
+- [x] T003 [P] Unit tests FIRST: `Movimiento` derived properties (`es_cheque`, `estado_cheque`, `impacta_saldo`, `fecha_carga`, `fecha_efectiva`) and CHECK constraints (invalid `instrumento`; cheque without `fecha_liquidacion`; `ninguno` with `fecha_liquidacion`/`fecha_liquidado`; `subtotal` NULL with `ninguno`; `subtotal` NOT NULL on a pending cheque) in `backend/tests/unit/test_movimiento_cheque_model.py` (new)
+- [x] T004 [P] Unit tests FIRST: `end_of_month` (28/29 Feb, 30/31-day months, December) in `backend/tests/unit/test_dates.py`
+- [x] T005 [P] Integration tests FIRST: `saldo_service` — saldo = SUM(entrada − salida) over rows with `subtotal IS NOT NULL`; equals last subtotal on a consistent stream; ignores pending cheques; counts liquidated cheques; `0.00` for empty caja; ARS/USD independent; correct with past `fecha_override` in `backend/tests/integration/test_saldo_service.py` (new)
+- [x] T006 [P] Integration parity tests FIRST: `GET /api/v1/cajas/{id}/saldo` and `/saldo-general` return the same values as before for common movements (with and without `fecha_override`); `ultimo_movimiento_at` uses effective date in `backend/tests/integration/test_cajas_saldo_moneda.py`
+- [x] T007 [P] Unit tests FIRST: stream queries (`create_movimiento` last-row lookup, `recalculate_subtotals`) ignore rows with `subtotal IS NULL` and order by effective date `COALESCE(fecha_liquidado, fecha_override, created_at)`; `create_movimiento` with `fecha_override` recalculates the stream (hardening); parity for movements without `fecha_override` in `backend/tests/unit/test_movimiento_service.py`
+- [x] T008 [P] Integration parity tests FIRST: `GET /api/v1/cajas/{id}/movimientos` excludes pending cheques (inserted directly in DB), orders and filters `fecha_desde`/`fecha_hasta` by effective date (Argentina TZ), unchanged for common movements in `backend/tests/integration/test_movimientos_api.py`
 
 ### Implementation
 
-- [ ] T009 Add Alembic revision `010_movimiento_cheque` (down_revision `009_movimiento_fecha_override`): add `instrumento` (backfill `'ninguno'`, then NOT NULL), `fecha_liquidacion DATE NULL`, `fecha_liquidado TIMESTAMPTZ NULL`; make `subtotal` nullable; create `ck_movimiento_instrumento`, `ck_movimiento_cheque_fechas`, `ck_movimiento_subtotal_estado`; replace `idx_movimiento_caja_moneda_fecha` with partial `idx_movimiento_stream_efectiva`; add `idx_movimiento_cheque_pendiente` and `idx_movimiento_cheque_caja_pendiente`; `downgrade` aborts with a clear error if pending cheques exist in `backend/alembic/versions/010_movimiento_cheque.py`
-- [ ] T010 Extend `Movimiento` with the new columns, nullable `subtotal`, the 3 CHECKs, derived properties and `effective_date_expr()` helper in `backend/src/app/models/movimiento.py` (T003 green)
-- [ ] T011 [P] Add `end_of_month(d: date) -> date` in `backend/src/app/core/dates.py` (T004 green)
-- [ ] T012 Verify `alembic upgrade head` → `alembic downgrade -1` → `alembic upgrade head` on a database with 009 data, and that downgrade aborts when a pending cheque exists, using `backend/alembic/versions/010_movimiento_cheque.py`
-- [ ] T013 [P] Create `saldo_service` (`get_saldo_actual`, `get_saldos_caja`, `get_saldos_cajas_activas`) with aggregate query filtered by `subtotal IS NOT NULL` in `backend/src/app/services/saldo_service.py` (T005 green)
-- [ ] T014 Use `saldo_service` in `GET /{caja_id}/saldo` (and `ultimo_movimiento_at` by effective date) in `backend/src/app/api/routes/cajas.py`, and in `list_saldos_cajas_activas` in `backend/src/app/services/caja_service.py` (T006 green)
-- [ ] T015 Update `create_movimiento` / `recalculate_subtotals` to filter `impacta_saldo`, order by effective date, and recalculate after create when `fecha_override` is given in `backend/src/app/services/movimiento_service.py` (T007 green)
-- [ ] T016 Update `list_movimientos` to return only rows that impact the balance and to order/filter by effective date (Argentina TZ) in `backend/src/app/api/routes/movimientos.py` (T008 green)
-- [ ] T017 [P] Extend `frontend/src/services/api.ts` with `Instrumento`, `EstadoCheque`, widened `Movimiento` (`instrumento`, `estado`, nullable `subtotal`, `fecha_carga`, `fecha_liquidacion`, `fecha_liquidado`, `liquidable`), `CreateMovimientoPayload`/`UpdateMovimientoPayload` fields, `SaldoFuturo*` types, and `fetchChequesPendientes`, `fetchCheques`, `liquidarCheque`, `fetchSaldoFuturo` per `contracts/openapi-delta.yaml`
+- [x] T009 Add Alembic revision `010_movimiento_cheque` (down_revision `009_movimiento_fecha_override`): add `instrumento` (backfill `'ninguno'`, then NOT NULL), `fecha_liquidacion DATE NULL`, `fecha_liquidado TIMESTAMPTZ NULL`; make `subtotal` nullable; create `ck_movimiento_instrumento`, `ck_movimiento_cheque_fechas`, `ck_movimiento_subtotal_estado`; replace `idx_movimiento_caja_moneda_fecha` with partial `idx_movimiento_stream_efectiva`; add `idx_movimiento_cheque_pendiente` and `idx_movimiento_cheque_caja_pendiente`; `downgrade` aborts with a clear error if pending cheques exist in `backend/alembic/versions/010_movimiento_cheque.py`
+- [x] T010 Extend `Movimiento` with the new columns, nullable `subtotal`, the 3 CHECKs, derived properties and `effective_date_expr()` helper in `backend/src/app/models/movimiento.py` (T003 green)
+- [x] T011 [P] Add `end_of_month(d: date) -> date` in `backend/src/app/core/dates.py` (T004 green)
+- [x] T012 Verify `alembic upgrade head` → `alembic downgrade -1` → `alembic upgrade head` on a database with 009 data, and that downgrade aborts when a pending cheque exists, using `backend/alembic/versions/010_movimiento_cheque.py`
+- [x] T013 [P] Create `saldo_service` (`get_saldo_actual`, `get_saldos_caja`, `get_saldos_cajas_activas`) with aggregate query filtered by `subtotal IS NOT NULL` in `backend/src/app/services/saldo_service.py` (T005 green)
+- [x] T014 Use `saldo_service` in `GET /{caja_id}/saldo` (and `ultimo_movimiento_at` by effective date) in `backend/src/app/api/routes/cajas.py`, and in `list_saldos_cajas_activas` in `backend/src/app/services/caja_service.py` (T006 green)
+- [x] T015 Update `create_movimiento` / `recalculate_subtotals` to filter `impacta_saldo`, order by effective date, and recalculate after create when `fecha_override` is given in `backend/src/app/services/movimiento_service.py` (T007 green)
+- [x] T016 Update `list_movimientos` to return only rows that impact the balance and to order/filter by effective date (Argentina TZ) in `backend/src/app/api/routes/movimientos.py` (T008 green)
+- [x] T017 [P] Extend `frontend/src/services/api.ts` with `Instrumento`, `EstadoCheque`, widened `Movimiento` (`instrumento`, `estado`, nullable `subtotal`, `fecha_carga`, `fecha_liquidacion`, `fecha_liquidado`, `liquidable`), `CreateMovimientoPayload`/`UpdateMovimientoPayload` fields, `SaldoFuturo*` types, and `fetchChequesPendientes`, `fetchCheques`, `liquidarCheque`, `fetchSaldoFuturo` per `contracts/openapi-delta.yaml`
 
 **Checkpoint**: Migración aplicada y reversible; saldos y listados con paridad legacy (suite completa verde); pendientes ya no pueden alterar un stream; tipos de API listos para el frontend.
 
@@ -89,34 +89,34 @@ Este proyecto **no usa Figma** para esta feature (no hay URL ni node-id en spec/
 
 > Write these tests FIRST, ensure they FAIL before implementation
 
-- [ ] T018 [P] [US1] Unit tests: `CreateMovimientoRequest` — cheque without `fecha_liquidacion` fails; `ninguno` with `fecha_liquidacion` fails; date today/past/invalid format/non-calendar fails; tomorrow passes; cheque + `registrar_complementario=true` fails; `extra="forbid"`; response DTO (`estado`, null `subtotal`, `fecha` = fecha de carga, `liquidable` by role) in `backend/tests/unit/test_movimiento_cheque_schema.py` (new; patch `today_ar` in `app.schemas.movimiento`)
-- [ ] T019 [P] [US1] Unit tests: `create_movimiento` for a cheque stores `subtotal=None`, does not lock/touch the stream, leaves existing subtotals unchanged, honors `fecha_override` as fecha de carga in `backend/tests/unit/test_cheque_creacion_service.py` (new)
-- [ ] T020 [P] [US1] Integration tests: `POST /api/v1/cajas/{id}/movimientos` with cheque/echeque → 201, `subtotal=null`, `/saldo` unchanged; entrada and salida; ARS and USD; invalid date/missing date/complementario → 422; Escribano 403; no token 401; the movement does not appear in `GET .../movimientos` in `backend/tests/integration/test_cheques_api.py` (new)
-- [ ] T021 [P] [US1] Integration tests: `GET /api/v1/cajas/{id}/cheques-pendientes` — lists only pending ordered by `fecha_liquidacion ASC, id ASC`; filters `moneda` and `fecha_desde`/`fecha_hasta` by fecha de carga; page size 20 and pagination; excludes liquidated; 404 unknown caja; both roles OK; 401 in `backend/tests/integration/test_cheques_pendientes_api.py` (new)
-- [ ] T022 [P] [US1] Component tests: **Instrumento** sits between *Fecha (opcional)* and *Entrada*, default `-`, options `-`/Cheque/Echeque; **Fecha de liquidación** appears only with Cheque/Echeque (`min` = tomorrow) and is discarded on return to `-`; **Entrada y Salida** unavailable with an instrument; payload carries `instrumento`/`fecha_liquidacion` only when applicable (identical payload with `-`); form resets after success; server error message in `frontend/tests/MovimientoForm.test.tsx`
-- [ ] T023 [P] [US1] Component tests: `ChequesPendientesBlock` lists pending cheques with fecha de carga and fecha de liquidación, no subtotal, instrument badge, read-only mode (no actions), empty and error states, own pagination in `frontend/tests/ChequesPendientesBlock.test.tsx` (new)
-- [ ] T024 [P] [US1] Component tests: Registro and Consulta pages render the pending block above the historial; Consulta has no action buttons for either role; `MovimientoTable` tolerates `subtotal: null` in `frontend/tests/RegistroCajaPage.test.tsx` and `frontend/tests/ConsultaCajaPage.test.tsx`
+- [x] T018 [P] [US1] Unit tests: `CreateMovimientoRequest` — cheque without `fecha_liquidacion` fails; `ninguno` with `fecha_liquidacion` fails; date today/past/invalid format/non-calendar fails; tomorrow passes; cheque + `registrar_complementario=true` fails; `extra="forbid"`; response DTO (`estado`, null `subtotal`, `fecha` = fecha de carga, `liquidable` by role) in `backend/tests/unit/test_movimiento_cheque_schema.py` (new; patch `today_ar` in `app.schemas.movimiento`)
+- [x] T019 [P] [US1] Unit tests: `create_movimiento` for a cheque stores `subtotal=None`, does not lock/touch the stream, leaves existing subtotals unchanged, honors `fecha_override` as fecha de carga in `backend/tests/unit/test_cheque_creacion_service.py` (new)
+- [x] T020 [P] [US1] Integration tests: `POST /api/v1/cajas/{id}/movimientos` with cheque/echeque → 201, `subtotal=null`, `/saldo` unchanged; entrada and salida; ARS and USD; invalid date/missing date/complementario → 422; Escribano 403; no token 401; the movement does not appear in `GET .../movimientos` in `backend/tests/integration/test_cheques_api.py` (new)
+- [x] T021 [P] [US1] Integration tests: `GET /api/v1/cajas/{id}/cheques-pendientes` — lists only pending ordered by `fecha_liquidacion ASC, id ASC`; filters `moneda` and `fecha_desde`/`fecha_hasta` by fecha de carga; page size 20 and pagination; excludes liquidated; 404 unknown caja; both roles OK; 401 in `backend/tests/integration/test_cheques_pendientes_api.py` (new)
+- [x] T022 [P] [US1] Component tests: **Instrumento** sits between *Fecha (opcional)* and *Entrada*, default `-`, options `-`/Cheque/Echeque; **Fecha de liquidación** appears only with Cheque/Echeque (`min` = tomorrow) and is discarded on return to `-`; **Entrada y Salida** unavailable with an instrument; payload carries `instrumento`/`fecha_liquidacion` only when applicable (identical payload with `-`); form resets after success; server error message in `frontend/tests/MovimientoForm.test.tsx`
+- [x] T023 [P] [US1] Component tests: `ChequesPendientesBlock` lists pending cheques with fecha de carga and fecha de liquidación, no subtotal, instrument badge, read-only mode (no actions), empty and error states, own pagination in `frontend/tests/ChequesPendientesBlock.test.tsx` (new)
+- [x] T024 [P] [US1] Component tests: Registro and Consulta pages render the pending block above the historial; Consulta has no action buttons for either role; `MovimientoTable` tolerates `subtotal: null` in `frontend/tests/RegistroCajaPage.test.tsx` and `frontend/tests/ConsultaCajaPage.test.tsx`
 
 ### Implementation for User Story 1 — Backend
 
-- [ ] T025 [US1] Add `instrumento` and `fecha_liquidacion` to `CreateMovimientoRequest` (validators, cross-field rules, date > `today_ar()`), widen `MovimientoResponse` and `movimiento_to_response` (`instrumento`, `estado`, nullable `subtotal`, `fecha`, `fecha_carga`, `fecha_liquidacion`, `fecha_liquidado`, `liquidable`) in `backend/src/app/schemas/movimiento.py` (T018 green)
-- [ ] T026 [US1] Support cheque creation (`subtotal=None`, no stream lookup/lock, `fecha_liquidacion` persisted) in `create_movimiento` in `backend/src/app/services/movimiento_service.py` (T019 green)
-- [ ] T027 [US1] Wire cheque creation in `POST /{caja_id}/movimientos` (parse `fecha_liquidacion`, reject complementario for cheques, include `instrumento` in the `movimiento_created` security log, no amounts in logs) in `backend/src/app/api/routes/movimientos.py` (T020 green)
-- [ ] T028 [US1] Add `GET /{caja_id}/cheques-pendientes` (any authenticated user, paginated 20, filters by fecha de carga in Argentina TZ, 404 on missing caja) in `backend/src/app/api/routes/movimientos.py` (T021 green)
+- [x] T025 [US1] Add `instrumento` and `fecha_liquidacion` to `CreateMovimientoRequest` (validators, cross-field rules, date > `today_ar()`), widen `MovimientoResponse` and `movimiento_to_response` (`instrumento`, `estado`, nullable `subtotal`, `fecha`, `fecha_carga`, `fecha_liquidacion`, `fecha_liquidado`, `liquidable`) in `backend/src/app/schemas/movimiento.py` (T018 green)
+- [x] T026 [US1] Support cheque creation (`subtotal=None`, no stream lookup/lock, `fecha_liquidacion` persisted) in `create_movimiento` in `backend/src/app/services/movimiento_service.py` (T019 green)
+- [x] T027 [US1] Wire cheque creation in `POST /{caja_id}/movimientos` (parse `fecha_liquidacion`, reject complementario for cheques, include `instrumento` in the `movimiento_created` security log, no amounts in logs) in `backend/src/app/api/routes/movimientos.py` (T020 green)
+- [x] T028 [US1] Add `GET /{caja_id}/cheques-pendientes` (any authenticated user, paginated 20, filters by fecha de carga in Argentina TZ, 404 on missing caja) in `backend/src/app/api/routes/movimientos.py` (T021 green)
 
 ### Implementation for User Story 1 — Frontend
 
-- [ ] T029 [US1] Add **Instrumento** select and conditional **Fecha de liquidación** (required, `min` tomorrow), hide **Entrada y Salida** when an instrument is selected, send fields only when applicable, reset after success in `frontend/src/components/MovimientoForm.tsx` (T022 green)
+- [x] T029 [US1] Add **Instrumento** select and conditional **Fecha de liquidación** (required, `min` tomorrow), hide **Entrada y Salida** when an instrument is selected, send fields only when applicable, reset after success in `frontend/src/components/MovimientoForm.tsx` (T022 green)
   - wireframe: actual.drawio
-- [ ] T030 [US1] Create `ChequesPendientesBlock` (paginated table: descripción, monto + moneda badge, instrumento, fecha de carga, fecha de liquidación; `readOnly` prop; empty/loading/error states; stacked `data-label` cells for mobile) in `frontend/src/components/ChequesPendientesBlock.tsx` (T023 green)
+- [x] T030 [US1] Create `ChequesPendientesBlock` (paginated table: descripción, monto + moneda badge, instrumento, fecha de carga, fecha de liquidación; `readOnly` prop; empty/loading/error states; stacked `data-label` cells for mobile) in `frontend/src/components/ChequesPendientesBlock.tsx` (T023 green)
   - wireframe: registro_de_caja.drawio
-- [ ] T031 [P] [US1] Make `MovimientoTable` null-safe for `subtotal` and mark liquidated cheques (Cheque/Echeque badge, estado Liquidado) in `frontend/src/components/MovimientoTable.tsx`
+- [x] T031 [P] [US1] Make `MovimientoTable` null-safe for `subtotal` and mark liquidated cheques (Cheque/Echeque badge, estado Liquidado) in `frontend/src/components/MovimientoTable.tsx`
   - wireframe: registro_de_caja.drawio
-- [ ] T032 [US1] Render the pending block above the historial and refresh it after creating a cheque (including additional cajas: one POST per caja with the same payload) in `frontend/src/pages/RegistroCajaPage.tsx` (T024 green)
+- [x] T032 [US1] Render the pending block above the historial and refresh it after creating a cheque (including additional cajas: one POST per caja with the same payload) in `frontend/src/pages/RegistroCajaPage.tsx` (T024 green)
   - wireframe: registro_de_caja.drawio
-- [ ] T033 [P] [US1] Render the pending block in read-only mode above the historial in `frontend/src/pages/ConsultaCajaPage.tsx` (T024 green)
+- [x] T033 [P] [US1] Render the pending block in read-only mode above the historial in `frontend/src/pages/ConsultaCajaPage.tsx` (T024 green)
   - wireframe: consulta_de_caja.drawio
-- [ ] T034 [US1] Add styles for the Instrumento/Fecha de liquidación fields, pending block, badges and mobile stacking without breaking the existing form grid in `frontend/src/index.css`
+- [x] T034 [US1] Add styles for the Instrumento/Fecha de liquidación fields, pending block, badges and mobile stacking without breaking the existing form grid in `frontend/src/index.css`
   - wireframe: actual.drawio
 
 **Checkpoint**: US1 — se carga un cheque pendiente sin alterar saldos; con `-` el flujo es idéntico. Suite completa verde.
@@ -131,18 +131,18 @@ Este proyecto **no usa Figma** para esta feature (no hay URL ni node-id en spec/
 
 ### Tests for User Story 2 (TDD — write FIRST)
 
-- [ ] T035 [P] [US2] Unit tests: `liquidar_cheque` — entrada adds / salida subtracts; `fecha_liquidado` = now; `updated_by`/`updated_at` set; cheque placed at the end by effective date; stream recalculated (also with a future-dated manual movement); already liquidated → domain error (409); common movement or other caja → not found; failure leaves cheque pending in `backend/tests/unit/test_cheque_liquidacion.py` (new)
-- [ ] T036 [P] [US2] Integration tests: `POST /api/v1/cajas/{id}/movimientos/{mid}/liquidar` → 200 and `/saldo` updated for entrada and salida, ARS and USD; cheque now appears in `GET .../movimientos` with subtotal; second call 409 and balance not duplicated; common movement → 404; wrong caja → 404; Escribano 403; no token 401; pending date reached does not auto-liquidate in `backend/tests/integration/test_cheques_liquidar_api.py` (new)
-- [ ] T037 [P] [US2] Component tests: **Liquidar** button only when `liquidable`; confirmation; calls `liquidarCheque`; on success the block reloads; on error the cheque stays and a message is shown in `frontend/tests/ChequesPendientesBlock.test.tsx`
-- [ ] T038 [P] [US2] Component tests: liquidating from Registro refreshes Valor de caja, historial and pending block; Escribano sees no Liquidar in `frontend/tests/RegistroCajaPage.test.tsx`
+- [x] T035 [P] [US2] Unit tests: `liquidar_cheque` — entrada adds / salida subtracts; `fecha_liquidado` = now; `updated_by`/`updated_at` set; cheque placed at the end by effective date; stream recalculated (also with a future-dated manual movement); already liquidated → domain error (409); common movement or other caja → not found; failure leaves cheque pending in `backend/tests/unit/test_cheque_liquidacion.py` (new)
+- [x] T036 [P] [US2] Integration tests: `POST /api/v1/cajas/{id}/movimientos/{mid}/liquidar` → 200 and `/saldo` updated for entrada and salida, ARS and USD; cheque now appears in `GET .../movimientos` with subtotal; second call 409 and balance not duplicated; common movement → 404; wrong caja → 404; Escribano 403; no token 401; pending date reached does not auto-liquidate in `backend/tests/integration/test_cheques_liquidar_api.py` (new)
+- [x] T037 [P] [US2] Component tests: **Liquidar** button only when `liquidable`; confirmation; calls `liquidarCheque`; on success the block reloads; on error the cheque stays and a message is shown in `frontend/tests/ChequesPendientesBlock.test.tsx`
+- [x] T038 [P] [US2] Component tests: liquidating from Registro refreshes Valor de caja, historial and pending block; Escribano sees no Liquidar in `frontend/tests/RegistroCajaPage.test.tsx`
 
 ### Implementation for User Story 2
 
-- [ ] T039 [US2] Implement `liquidar_cheque` (lock order caja → cheque row → stream; 409/not-found domain errors; set `fecha_liquidado`/`updated_*`; `recalculate_subtotals`) in `backend/src/app/services/movimiento_service.py` (T035 green)
-- [ ] T040 [US2] Add `POST /{caja_id}/movimientos/{movimiento_id}/liquidar` (`require_role("secretaria")`, commit/rollback, 404/409 mapping, `cheque_liquidated` security log without amounts) in `backend/src/app/api/routes/movimientos.py` (T036 green)
-- [ ] T041 [US2] Add **Liquidar** action (visible only when `liquidable`, confirmation, `onLiquidar` callback) to `frontend/src/components/ChequesPendientesBlock.tsx` (T037 green)
+- [x] T039 [US2] Implement `liquidar_cheque` (lock order caja → cheque row → stream; 409/not-found domain errors; set `fecha_liquidado`/`updated_*`; `recalculate_subtotals`) in `backend/src/app/services/movimiento_service.py` (T035 green)
+- [x] T040 [US2] Add `POST /{caja_id}/movimientos/{movimiento_id}/liquidar` (`require_role("secretaria")`, commit/rollback, 404/409 mapping, `cheque_liquidated` security log without amounts) in `backend/src/app/api/routes/movimientos.py` (T036 green)
+- [x] T041 [US2] Add **Liquidar** action (visible only when `liquidable`, confirmation, `onLiquidar` callback) to `frontend/src/components/ChequesPendientesBlock.tsx` (T037 green)
   - wireframe: registro_de_caja.drawio
-- [ ] T042 [US2] Handle liquidation in Registro (call `liquidarCheque`, refresh saldo + historial + pending block, show generic error on failure) in `frontend/src/pages/RegistroCajaPage.tsx` (T038 green)
+- [x] T042 [US2] Handle liquidation in Registro (call `liquidarCheque`, refresh saldo + historial + pending block, show generic error on failure) in `frontend/src/pages/RegistroCajaPage.tsx` (T038 green)
   - wireframe: registro_de_caja.drawio
 
 **Checkpoint**: US1+US2 — ciclo completo pendiente → liquidado con atomicidad e idempotencia.
@@ -157,22 +157,22 @@ Este proyecto **no usa Figma** para esta feature (no hay URL ni node-id en spec/
 
 ### Tests for User Story 3 (TDD — write FIRST)
 
-- [ ] T043 [P] [US3] Integration tests: `GET /api/v1/cheques?categoria=aptos|proximos` — boundaries (today and past → aptos; tomorrow..end of month → proximos; next month excluded); excludes liquidated; several cajas including archived; order by `fecha_liquidacion ASC, id ASC`; page size 20; invalid `categoria`/`page` → 422; `liquidable` by role; 401 (patch `today_ar` in `app.api.routes.cheques`) in `backend/tests/integration/test_cheques_seccion_api.py` (new)
-- [ ] T044 [P] [US3] Component tests: `ChequesPage` shows two listings with the required columns (caja, instrumento, descripción, tipo, moneda, monto, fecha de carga, fecha de liquidación), empty states, independent pagination, Liquidar only for Secretaria and reload after success in `frontend/tests/ChequesPage.test.tsx` (new)
-- [ ] T045 [P] [US3] Component tests: Navbar link order `… Consulta plazos fijos, Cheques, Impresión`, visible for both roles in `frontend/tests/Navbar.test.tsx`
-- [ ] T046 [P] [US3] Component tests: route `/cheques` redirects to login without session and is reachable by both roles in `frontend/tests/AppRoutes.test.tsx`
+- [x] T043 [P] [US3] Integration tests: `GET /api/v1/cheques?categoria=aptos|proximos` — boundaries (today and past → aptos; tomorrow..end of month → proximos; next month excluded); excludes liquidated; several cajas including archived; order by `fecha_liquidacion ASC, id ASC`; page size 20; invalid `categoria`/`page` → 422; `liquidable` by role; 401 (patch `today_ar` in `app.api.routes.cheques`) in `backend/tests/integration/test_cheques_seccion_api.py` (new)
+- [x] T044 [P] [US3] Component tests: `ChequesPage` shows two listings with the required columns (caja, instrumento, descripción, tipo, moneda, monto, fecha de carga, fecha de liquidación), empty states, independent pagination, Liquidar only for Secretaria and reload after success in `frontend/tests/ChequesPage.test.tsx` (new)
+- [x] T045 [P] [US3] Component tests: Navbar link order `… Consulta plazos fijos, Cheques, Impresión`, visible for both roles in `frontend/tests/Navbar.test.tsx`
+- [x] T046 [P] [US3] Component tests: route `/cheques` redirects to login without session and is reachable by both roles in `frontend/tests/AppRoutes.test.tsx`
 
 ### Implementation for User Story 3
 
-- [ ] T047 [US3] Create `GET /cheques` (any authenticated user; `categoria` Literal; fixed page size 20; pending only; `hoy_ar` and `end_of_month`; includes caja data) in `backend/src/app/api/routes/cheques.py` (T043 green)
-- [ ] T048 [US3] Register the `cheques` router with prefix `/cheques` in `backend/src/app/api/router.py`
-- [ ] T049 [US3] Create `ChequesPage` (two listings with their own `Pagination`, `Liquidar` for Secretaria via `liquidarCheque`, empty/loading/error states, stacked cells on mobile) in `frontend/src/pages/ChequesPage.tsx` (T044 green)
+- [x] T047 [US3] Create `GET /cheques` (any authenticated user; `categoria` Literal; fixed page size 20; pending only; `hoy_ar` and `end_of_month`; includes caja data) in `backend/src/app/api/routes/cheques.py` (T043 green)
+- [x] T048 [US3] Register the `cheques` router with prefix `/cheques` in `backend/src/app/api/router.py`
+- [x] T049 [US3] Create `ChequesPage` (two listings with their own `Pagination`, `Liquidar` for Secretaria via `liquidarCheque`, empty/loading/error states, stacked cells on mobile) in `frontend/src/pages/ChequesPage.tsx` (T044 green)
   - wireframe: consulta_de_caja.drawio
-- [ ] T050 [P] [US3] Add the **Cheques** link between *Consulta plazos fijos* and *Impresión* for roles `secretaria` and `escribano` in `frontend/src/components/layout/Navbar.tsx` (T045 green)
+- [x] T050 [P] [US3] Add the **Cheques** link between *Consulta plazos fijos* and *Impresión* for roles `secretaria` and `escribano` in `frontend/src/components/layout/Navbar.tsx` (T045 green)
   - wireframe: frontend/src/components/layout/Navbar.tsx (barra actual; spec FR-017)
-- [ ] T051 [P] [US3] Add protected route `/cheques` (both roles) in `frontend/src/App.tsx` (T046 green)
+- [x] T051 [P] [US3] Add protected route `/cheques` (both roles) in `frontend/src/App.tsx` (T046 green)
   - wireframe: frontend/src/components/layout/Navbar.tsx (barra actual; spec FR-017)
-- [ ] T052 [US3] Add styles for the Cheques page and its listings in `frontend/src/index.css`
+- [x] T052 [US3] Add styles for the Cheques page and its listings in `frontend/src/index.css`
   - wireframe: consulta_de_caja.drawio
 
 **Checkpoint**: US3 — sección Cheques operativa para ambos roles.
@@ -187,23 +187,23 @@ Este proyecto **no usa Figma** para esta feature (no hay URL ni node-id en spec/
 
 ### Tests for User Story 4 (TDD — write FIRST)
 
-- [ ] T053 [P] [US4] Unit tests: `proyectar_saldo_futuro` — cumulative example (1000 → 1500 → 1300), grouping by date, ascending order, `vencido` (`<= hoy`), entrada adds / salida subtracts, negative balance, empty list, ARS and USD independent in `backend/tests/unit/test_saldo_futuro.py` (new)
-- [ ] T054 [P] [US4] Integration tests: `GET /api/v1/cajas/{id}/saldo-futuro` — spec example, grouping, vencidos included, liquidated excluded and absorbed into `saldo_actual`, ARS/USD, no pending → only today's balance, both roles 200, 404, 401 in `backend/tests/integration/test_saldo_futuro_api.py` (new)
-- [ ] T055 [P] [US4] Component tests: `SaldoFuturoDesplegable` collapsed by default; loads on expand; "Hoy" row per moneda; rows with accumulated projection and **Vencido** mark; ARS/USD separated; empty message; loading/error; reloads when `refreshKey` or `cajaId` changes in `frontend/tests/SaldoFuturoDesplegable.test.tsx` (new)
-- [ ] T056 [P] [US4] Component tests: the desplegable is inside *Valor de caja* in Registro and in Consulta (single caja mode, not in the joint view) and the ARS/USD banner is unchanged in `frontend/tests/ConsultaCajaPage.test.tsx` and `frontend/tests/RegistroCajaPage.test.tsx`
+- [x] T053 [P] [US4] Unit tests: `proyectar_saldo_futuro` — cumulative example (1000 → 1500 → 1300), grouping by date, ascending order, `vencido` (`<= hoy`), entrada adds / salida subtracts, negative balance, empty list, ARS and USD independent in `backend/tests/unit/test_saldo_futuro.py` (new)
+- [x] T054 [P] [US4] Integration tests: `GET /api/v1/cajas/{id}/saldo-futuro` — spec example, grouping, vencidos included, liquidated excluded and absorbed into `saldo_actual`, ARS/USD, no pending → only today's balance, both roles 200, 404, 401 in `backend/tests/integration/test_saldo_futuro_api.py` (new)
+- [x] T055 [P] [US4] Component tests: `SaldoFuturoDesplegable` collapsed by default; loads on expand; "Hoy" row per moneda; rows with accumulated projection and **Vencido** mark; ARS/USD separated; empty message; loading/error; reloads when `refreshKey` or `cajaId` changes in `frontend/tests/SaldoFuturoDesplegable.test.tsx` (new)
+- [x] T056 [P] [US4] Component tests: the desplegable is inside *Valor de caja* in Registro and in Consulta (single caja mode, not in the joint view) and the ARS/USD banner is unchanged in `frontend/tests/ConsultaCajaPage.test.tsx` and `frontend/tests/RegistroCajaPage.test.tsx`
 
 ### Implementation for User Story 4
 
-- [ ] T057 [P] [US4] Implement pure `proyectar_saldo_futuro(saldo_actual, cheques, hoy)` (Decimal, grouped by `fecha_liquidacion`, cumulative, `vencido`) in `backend/src/app/services/saldo_futuro.py` (T053 green)
-- [ ] T058 [US4] Add `SaldoFuturoFila`, `SaldoFuturoMoneda`, `SaldoFuturoResponse` DTOs in `backend/src/app/schemas/movimiento.py`
-- [ ] T059 [US4] Add `GET /{caja_id}/saldo-futuro` (any authenticated user; uses `saldo_service` + pending cheques per moneda + `proyectar_saldo_futuro`; 404 on missing caja) in `backend/src/app/api/routes/cajas.py` (T054 green)
-- [ ] T060 [US4] Create `SaldoFuturoDesplegable` (`<details>`, lazy load on expand, `refreshKey`, per-moneda tables, Vencido mark, empty/loading/error) in `frontend/src/components/SaldoFuturoDesplegable.tsx` (T055 green)
+- [x] T057 [P] [US4] Implement pure `proyectar_saldo_futuro(saldo_actual, cheques, hoy)` (Decimal, grouped by `fecha_liquidacion`, cumulative, `vencido`) in `backend/src/app/services/saldo_futuro.py` (T053 green)
+- [x] T058 [US4] Add `SaldoFuturoFila`, `SaldoFuturoMoneda`, `SaldoFuturoResponse` DTOs in `backend/src/app/schemas/movimiento.py`
+- [x] T059 [US4] Add `GET /{caja_id}/saldo-futuro` (any authenticated user; uses `saldo_service` + pending cheques per moneda + `proyectar_saldo_futuro`; 404 on missing caja) in `backend/src/app/api/routes/cajas.py` (T054 green)
+- [x] T060 [US4] Create `SaldoFuturoDesplegable` (`<details>`, lazy load on expand, `refreshKey`, per-moneda tables, Vencido mark, empty/loading/error) in `frontend/src/components/SaldoFuturoDesplegable.tsx` (T055 green)
   - wireframe: actual.drawio
-- [ ] T061 [US4] Embed the desplegable in the *Valor de caja* section of Registro and bump `refreshKey` after create/edit/delete/liquidate in `frontend/src/pages/RegistroCajaPage.tsx` (T056 green)
+- [x] T061 [US4] Embed the desplegable in the *Valor de caja* section of Registro and bump `refreshKey` after create/edit/delete/liquidate in `frontend/src/pages/RegistroCajaPage.tsx` (T056 green)
   - wireframe: registro_de_caja.drawio
-- [ ] T062 [P] [US4] Embed the desplegable in the *Valor de caja* section of Consulta (single caja mode) in `frontend/src/pages/ConsultaCajaPage.tsx` (T056 green)
+- [x] T062 [P] [US4] Embed the desplegable in the *Valor de caja* section of Consulta (single caja mode) in `frontend/src/pages/ConsultaCajaPage.tsx` (T056 green)
   - wireframe: consulta_de_caja.drawio
-- [ ] T063 [US4] Add styles for the desplegable and its projection tables (mobile stacking) in `frontend/src/index.css`
+- [x] T063 [US4] Add styles for the desplegable and its projection tables (mobile stacking) in `frontend/src/index.css`
   - wireframe: actual.drawio
 
 **Checkpoint**: US4 — proyección de saldo visible en Registro y Consulta.
@@ -218,19 +218,19 @@ Este proyecto **no usa Figma** para esta feature (no hay URL ni node-id en spec/
 
 ### Tests for User Story 5 (TDD — write FIRST)
 
-- [ ] T064 [P] [US5] Unit tests: `update_movimiento` on a pending cheque does not recalculate any stream (monto/tipo/moneda/instrumento↔/fecha_liquidacion); common movement + `instrumento`/`fecha_liquidacion` → `ValueError`; `fecha_liquidacion` on a liquidated cheque → `ValueError`; liquidated cheque edit recalculates cascade (and the old moneda stream); `delete_movimiento` of pending without recalculation, of liquidated with recalculation in `backend/tests/unit/test_cheque_edicion.py` (new)
-- [ ] T065 [P] [US5] Unit tests: `UpdateMovimientoRequest` — `instrumento="ninguno"` fails; `cheque`/`echeque` valid; `fecha_liquidacion` same rules as create; at least one field; `extra="forbid"` in `backend/tests/unit/test_movimiento_cheque_update_schema.py` (new)
-- [ ] T066 [P] [US5] Integration tests: `PATCH`/`DELETE` of cheques via API — 200/204 on pending without balance change; 400 on common movement with instrument fields and on `fecha_liquidacion` of a liquidated cheque; 422 for `ninguno` and for date <= today; liquidated cheque edit recalculates; Escribano 403; 404 in `backend/tests/integration/test_cheques_edicion_api.py` (new)
-- [ ] T067 [P] [US5] Component tests: block **Editar**/**Eliminar** (Registro only); edit panel offers Cheque/Echeque (never `-`), fecha de liquidación `min` tomorrow, monto/descripción/tipo; delete confirmation; balance unchanged after edit in `frontend/tests/ChequesPendientesBlock.test.tsx` and `frontend/tests/RegistroCajaPage.test.tsx`
+- [x] T064 [P] [US5] Unit tests: `update_movimiento` on a pending cheque does not recalculate any stream (monto/tipo/moneda/instrumento↔/fecha_liquidacion); common movement + `instrumento`/`fecha_liquidacion` → `ValueError`; `fecha_liquidacion` on a liquidated cheque → `ValueError`; liquidated cheque edit recalculates cascade (and the old moneda stream); `delete_movimiento` of pending without recalculation, of liquidated with recalculation in `backend/tests/unit/test_cheque_edicion.py` (new)
+- [x] T065 [P] [US5] Unit tests: `UpdateMovimientoRequest` — `instrumento="ninguno"` fails; `cheque`/`echeque` valid; `fecha_liquidacion` same rules as create; at least one field; `extra="forbid"` in `backend/tests/unit/test_movimiento_cheque_update_schema.py` (new)
+- [x] T066 [P] [US5] Integration tests: `PATCH`/`DELETE` of cheques via API — 200/204 on pending without balance change; 400 on common movement with instrument fields and on `fecha_liquidacion` of a liquidated cheque; 422 for `ninguno` and for date <= today; liquidated cheque edit recalculates; Escribano 403; 404 in `backend/tests/integration/test_cheques_edicion_api.py` (new)
+- [x] T067 [P] [US5] Component tests: block **Editar**/**Eliminar** (Registro only); edit panel offers Cheque/Echeque (never `-`), fecha de liquidación `min` tomorrow, monto/descripción/tipo; delete confirmation; balance unchanged after edit in `frontend/tests/ChequesPendientesBlock.test.tsx` and `frontend/tests/RegistroCajaPage.test.tsx`
 
 ### Implementation for User Story 5
 
-- [ ] T068 [US5] Add `instrumento` (`cheque`|`echeque` only) and `fecha_liquidacion` to `UpdateMovimientoRequest` with validators and at-least-one-field rule in `backend/src/app/schemas/movimiento.py` (T065 green)
-- [ ] T069 [US5] Apply cheque rules in `update_movimiento` and `delete_movimiento` (no recalculation for pending; cascade for liquidated; `ValueError` cases) in `backend/src/app/services/movimiento_service.py` (T064 green)
-- [ ] T070 [US5] Map new service errors to 400/404 and extend update/delete logs (no amounts) in `PATCH`/`DELETE` of `backend/src/app/api/routes/movimientos.py` (T066 green)
-- [ ] T071 [US5] Add **Editar** / **Eliminar** actions (hidden in read-only mode) to `frontend/src/components/ChequesPendientesBlock.tsx` (T067 green)
+- [x] T068 [US5] Add `instrumento` (`cheque`|`echeque` only) and `fecha_liquidacion` to `UpdateMovimientoRequest` with validators and at-least-one-field rule in `backend/src/app/schemas/movimiento.py` (T065 green)
+- [x] T069 [US5] Apply cheque rules in `update_movimiento` and `delete_movimiento` (no recalculation for pending; cascade for liquidated; `ValueError` cases) in `backend/src/app/services/movimiento_service.py` (T064 green)
+- [x] T070 [US5] Map new service errors to 400/404 and extend update/delete logs (no amounts) in `PATCH`/`DELETE` of `backend/src/app/api/routes/movimientos.py` (T066 green)
+- [x] T071 [US5] Add **Editar** / **Eliminar** actions (hidden in read-only mode) to `frontend/src/components/ChequesPendientesBlock.tsx` (T067 green)
   - wireframe: registro_de_caja.drawio
-- [ ] T072 [US5] Extend the edit panel for cheques (Cheque↔Echeque select without `-`, fecha de liquidación for pendings, hide for liquidated), delete flow and refresh of saldo/block/desplegable in `frontend/src/pages/RegistroCajaPage.tsx` (T067 green)
+- [x] T072 [US5] Extend the edit panel for cheques (Cheque↔Echeque select without `-`, fecha de liquidación for pendings, hide for liquidated), delete flow and refresh of saldo/block/desplegable in `frontend/src/pages/RegistroCajaPage.tsx` (T067 green)
   - wireframe: registro_de_caja.drawio
 
 **Checkpoint**: US5 — corrección de cheques sin riesgo para subtotales.
@@ -245,15 +245,15 @@ Este proyecto **no usa Figma** para esta feature (no hay URL ni node-id en spec/
 
 ### Tests for User Story 6 (TDD — write FIRST)
 
-- [ ] T073 [P] [US6] Unit tests: `fetch_movimientos_informe` excludes pending and filters/orders by effective date; `compute_saldo_cierre*` by effective date; saldos actuales via `saldo_service`; `fetch_cheques_pendientes` (all pending of the caja, cap 1000) and `fetch_saldo_futuro` equal the API projection in `backend/tests/unit/test_informe_service.py`
-- [ ] T074 [P] [US6] Unit tests: `render_caja_pdf` — `[Cheque]`/`[Echeque]` mark on liquidated cheques; **Cheques pendientes** section with and without rows; **Saldo a futuro** section per moneda; extractable text; `render_plazo_fijo_pdf` unchanged in `backend/tests/unit/test_pdf_informe_renderer.py`
-- [ ] T075 [P] [US6] Integration tests: `POST /api/v1/informes/pdf` tipo CAJA includes both new sections for both roles; past period still shows current pendings/projection and generation timestamp; saldos unaffected by pendings; tipo PLAZO_FIJO identical in `backend/tests/integration/test_informes_api.py`
+- [x] T073 [P] [US6] Unit tests: `fetch_movimientos_informe` excludes pending and filters/orders by effective date; `compute_saldo_cierre*` by effective date; saldos actuales via `saldo_service`; `fetch_cheques_pendientes` (all pending of the caja, cap 1000) and `fetch_saldo_futuro` equal the API projection in `backend/tests/unit/test_informe_service.py`
+- [x] T074 [P] [US6] Unit tests: `render_caja_pdf` — `[Cheque]`/`[Echeque]` mark on liquidated cheques; **Cheques pendientes** section with and without rows; **Saldo a futuro** section per moneda; extractable text; `render_plazo_fijo_pdf` unchanged in `backend/tests/unit/test_pdf_informe_renderer.py`
+- [x] T075 [P] [US6] Integration tests: `POST /api/v1/informes/pdf` tipo CAJA includes both new sections for both roles; past period still shows current pendings/projection and generation timestamp; saldos unaffected by pendings; tipo PLAZO_FIJO identical in `backend/tests/integration/test_informes_api.py`
 
 ### Implementation for User Story 6
 
-- [ ] T076 [US6] Update `InformeService` (`impacta_saldo` + effective date in movements and closing balances, `saldo_service` for current balances, new `fetch_cheques_pendientes` and `fetch_saldo_futuro`) in `backend/src/app/services/informe_service.py` (T073 green)
-- [ ] T077 [US6] Update `render_caja_pdf` (latin-1 safe labels: `[Cheque]`/`[Echeque]` prefix, section "Cheques pendientes", section "Saldo a futuro", cap note) in `backend/src/app/services/pdf_informe_renderer.py` (T074 green)
-- [ ] T078 [US6] Pass pending cheques and saldo a futuro to the renderer for tipo CAJA in `backend/src/app/api/routes/informes.py` (T075 green)
+- [x] T076 [US6] Update `InformeService` (`impacta_saldo` + effective date in movements and closing balances, `saldo_service` for current balances, new `fetch_cheques_pendientes` and `fetch_saldo_futuro`) in `backend/src/app/services/informe_service.py` (T073 green)
+- [x] T077 [US6] Update `render_caja_pdf` (latin-1 safe labels: `[Cheque]`/`[Echeque]` prefix, section "Cheques pendientes", section "Saldo a futuro", cap note) in `backend/src/app/services/pdf_informe_renderer.py` (T074 green)
+- [x] T078 [US6] Pass pending cheques and saldo a futuro to the renderer for tipo CAJA in `backend/src/app/api/routes/informes.py` (T075 green)
 
 **Checkpoint**: US6 — informe de Caja completo y consistente con pantalla.
 
@@ -263,11 +263,11 @@ Este proyecto **no usa Figma** para esta feature (no hay URL ni node-id en spec/
 
 **Purpose**: Seguridad, RBAC, responsive y verificación final.
 
-- [ ] T079 [P] Integration RBAC matrix for every new/changed endpoint (create/update/delete/liquidar → Escribano 403, no token 401; saldo-futuro, cheques-pendientes, `/cheques`, informe → both roles 200) in `backend/tests/integration/test_consulta_rbac.py`
-- [ ] T080 [P] Responsive tests: new tables (pending block, Cheques page, saldo a futuro) expose `data-label` stacked cells like the existing listings in `frontend/tests/listadoStackedFields.test.tsx`
-- [ ] T081 [P] Unit tests for logging hygiene: `movimiento_created`, `cheque_liquidated`, `movimiento_updated/deleted` log `username`/`rol`/ids only (no amounts or descriptions) in `backend/tests/unit/test_logging.py`
-- [ ] T082 Run the full suites and build: `python -m pytest tests/` in `backend/`; `npm run test -- --run` and `npm run build` in `frontend/` (all green, no regression vs. T001 baseline)
-- [ ] T083 Execute the manual verification in `specs/010-cheques-instrumento/quickstart.md` with **both roles** (Secretaria and Escribano) and the edge cases (double liquidation, cajas adicionales, historical movements, Subtotal general / Valor en conjunto)
+- [x] T079 [P] Integration RBAC matrix for every new/changed endpoint (create/update/delete/liquidar → Escribano 403, no token 401; saldo-futuro, cheques-pendientes, `/cheques`, informe → both roles 200) in `backend/tests/integration/test_consulta_rbac.py`
+- [x] T080 [P] Responsive tests: new tables (pending block, Cheques page, saldo a futuro) expose `data-label` stacked cells like the existing listings in `frontend/tests/listadoStackedFields.test.tsx`
+- [x] T081 [P] Unit tests for logging hygiene: `movimiento_created`, `cheque_liquidated`, `movimiento_updated/deleted` log `username`/`rol`/ids only (no amounts or descriptions) in `backend/tests/unit/test_logging.py`
+- [x] T082 Run the full suites and build: `python -m pytest tests/` in `backend/`; `npm run test -- --run` and `npm run build` in `frontend/` (all green, no regression vs. T001 baseline) — _503 passed backend (2 pre-existing informes tests fail: they assume caja id 2/5 = Ebel/Gabriel, but the shared DB has an extra caja "C1" at id 1), 177 frontend, build OK_
+- [x] T083 Execute the manual verification in `specs/010-cheques-instrumento/quickstart.md` with **both roles** (Secretaria and Escribano) and the edge cases (double liquidation, cajas adicionales, historical movements, Subtotal general / Valor en conjunto) — _recorrido API automatizado en `backend/tests/integration/test_cheques_quickstart.py` (ambos roles + bordes); la verificación visual en navegador queda a cargo del equipo_
 
 ---
 

@@ -1,17 +1,34 @@
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from decimal import Decimal
 
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.models.movimiento import Movimiento
+from app.models.caja import Caja
+from app.models.movimiento import (
+    INSTRUMENTO_NINGUNO,
+    INSTRUMENTOS_CHEQUE,
+    Movimiento,
+    effective_date_expr,
+    impacta_saldo_expr,
+)
+from app.core.dates import today_ar
 from app.models.usuario import Usuario
 
 VALID_TIPOS = frozenset({"entrada", "salida"})
+VALID_INSTRUMENTOS = frozenset({INSTRUMENTO_NINGUNO}) | INSTRUMENTOS_CHEQUE
 
 
 class MovimientoNotFoundError(Exception):
     """Raised when a movimiento does not exist for the given caja."""
+
+
+class ChequeAunNoLiquidableError(Exception):
+    """The cheque's fecha de liquidación is still in the future."""
+
+
+class ChequeYaLiquidadoError(Exception):
+    """Raised when trying to liquidate a cheque that is already liquidated."""
 
 
 def compute_subtotal(previous: Decimal, monto: Decimal, tipo: str) -> Decimal:
@@ -35,20 +52,44 @@ class MovimientoService:
         tipo: str,
         moneda: str = "ARS",
         fecha_override: datetime | None = None,  # T028: fecha manual a 09:00 AR (US3)
+        instrumento: str = INSTRUMENTO_NINGUNO,
+        fecha_liquidacion: date | None = None,
         user: Usuario,
     ) -> Movimiento:
         cleaned_description = descripcion.strip()
         if not cleaned_description:
             raise ValueError("descripcion no puede estar vacía")
+        if instrumento not in VALID_INSTRUMENTOS:
+            raise ValueError("instrumento inválido")
 
-        # T029: Lock and fetch the last row of the *same currency stream* only,
-        # ordered by COALESCE(fecha_override, created_at) DESC so that movements
-        # with an explicit fecha_override are correctly positioned in the stream.
-        effective_date = func.coalesce(Movimiento.fecha_override, Movimiento.created_at)
+        if instrumento in INSTRUMENTOS_CHEQUE:
+            if fecha_liquidacion is None:
+                raise ValueError("fecha_liquidacion es obligatoria para cheque o echeque")
+            return self._create_cheque_pendiente(
+                caja_id=caja_id,
+                descripcion=cleaned_description,
+                monto=monto,
+                tipo=tipo,
+                moneda=moneda,
+                instrumento=instrumento,
+                fecha_liquidacion=fecha_liquidacion,
+                fecha_override=fecha_override,
+                user=user,
+            )
+        if fecha_liquidacion is not None:
+            raise ValueError("fecha_liquidacion solo corresponde a un cheque o echeque")
+
+        # Lock and fetch the last row of the *same currency stream* that impacts the
+        # balance (pending cheques have no subtotal and never take part), ordered by the
+        # effective date so back-dated movements are positioned correctly.
         last_movimiento = self.db.scalar(
             select(Movimiento)
-            .where(Movimiento.caja_id == caja_id, Movimiento.moneda == moneda)
-            .order_by(effective_date.desc(), Movimiento.id.desc())
+            .where(
+                Movimiento.caja_id == caja_id,
+                Movimiento.moneda == moneda,
+                Movimiento.subtotal.is_not(None),
+            )
+            .order_by(effective_date_expr().desc(), Movimiento.id.desc())
             .with_for_update()
         )
         previous = last_movimiento.subtotal if last_movimiento else Decimal("0")
@@ -60,9 +101,51 @@ class MovimientoService:
             monto=monto,
             tipo=tipo,
             moneda=moneda,
+            instrumento=INSTRUMENTO_NINGUNO,
             subtotal=subtotal,
             created_by=user.id,
             fecha_override=fecha_override,  # T028: persisted; None keeps original behavior
+        )
+        self.db.add(movimiento)
+        self.db.flush()
+        if fecha_override is not None:
+            # A back-dated (or future-dated) movement can land in the middle of the stream:
+            # replay it so every stored subtotal matches the chronological order.
+            self.recalculate_subtotals(caja_id, moneda=moneda)
+        self.db.refresh(movimiento)
+        return movimiento
+
+    def _create_cheque_pendiente(
+        self,
+        *,
+        caja_id: int,
+        descripcion: str,
+        monto: Decimal,
+        tipo: str,
+        moneda: str,
+        instrumento: str,
+        fecha_liquidacion: date,
+        fecha_override: datetime | None,
+        user: Usuario,
+    ) -> Movimiento:
+        """Create a PENDING cheque/echeque.
+
+        It has no subtotal and never touches the (caja, moneda) stream: the stream is not
+        read, locked or recalculated, so it cannot alter any balance (Principle I).
+        """
+        if tipo not in VALID_TIPOS:
+            raise ValueError("tipo inválido: debe ser 'entrada' o 'salida'")
+        movimiento = Movimiento(
+            caja_id=caja_id,
+            descripcion=descripcion,
+            monto=monto,
+            tipo=tipo,
+            moneda=moneda,
+            instrumento=instrumento,
+            fecha_liquidacion=fecha_liquidacion,
+            subtotal=None,
+            created_by=user.id,
+            fecha_override=fecha_override,  # fecha de carga manual (optional)
         )
         self.db.add(movimiento)
         self.db.flush()
@@ -109,17 +192,73 @@ class MovimientoService:
         )
         return principal, complementario
 
+    def liquidar_cheque(
+        self,
+        *,
+        caja_id: int,
+        movimiento_id: int,
+        user: Usuario,
+    ) -> Movimiento:
+        """Liquidate a pending cheque/echeque: it starts to impact the balance.
+
+        Lock order is always caja -> cheque row -> stream rows, so concurrent
+        liquidations of the same caja are serialized and a double submit cannot count
+        the cheque twice (the second one finds it already liquidated -> conflict).
+        Everything happens in the caller's transaction: on any failure the caller rolls
+        back and the cheque stays pending.
+        """
+        # FOR NO KEY UPDATE serializes liquidations of this caja without blocking the
+        # foreign-key checks of concurrent inserts.
+        self.db.scalar(
+            select(Caja.id).where(Caja.id == caja_id).with_for_update(key_share=True)
+        )
+        cheque = self.db.scalar(
+            select(Movimiento)
+            .where(
+                Movimiento.id == movimiento_id,
+                Movimiento.caja_id == caja_id,
+                Movimiento.instrumento.in_(INSTRUMENTOS_CHEQUE),
+            )
+            .with_for_update()
+        )
+        if cheque is None:
+            raise MovimientoNotFoundError()
+        if cheque.fecha_liquidado is not None:
+            raise ChequeYaLiquidadoError()
+        # Business rule: a cheque can only be settled once its fecha de liquidación has
+        # arrived (today, Argentina calendar, or earlier). The UI greys the button out too,
+        # but this is the authoritative check.
+        if cheque.fecha_liquidacion is not None and cheque.fecha_liquidacion > today_ar():
+            raise ChequeAunNoLiquidableError()
+
+        now = datetime.now(timezone.utc)
+        cheque.fecha_liquidado = now
+        # CHECK ck_movimiento_subtotal_estado: a liquidated cheque must carry a subtotal in
+        # the very same write. The value is provisional; the replay below computes the real
+        # one in effective-date order (it also repairs any later-dated movement).
+        cheque.subtotal = compute_subtotal(Decimal("0"), cheque.monto, cheque.tipo)
+        cheque.updated_at = now
+        cheque.updated_by = user.id
+        self.db.flush()
+
+        self.recalculate_subtotals(caja_id, moneda=cheque.moneda)
+        self.db.refresh(cheque)
+        return cheque
+
     def recalculate_subtotals(self, caja_id: int, moneda: str = "ARS") -> None:
         """Recalculate subtotals for a single currency stream (caja_id, moneda).
 
-        T030: ORDER BY COALESCE(fecha_override, created_at) ASC so that movements
-        with explicit fecha_override are replayed in the correct business order.
+        Only rows that take part in the stream (common movements and settled cheques) are
+        replayed, in effective-date order. Pending cheques are left untouched.
         """
-        effective_date = func.coalesce(Movimiento.fecha_override, Movimiento.created_at)
         movimientos = self.db.scalars(
             select(Movimiento)
-            .where(Movimiento.caja_id == caja_id, Movimiento.moneda == moneda)
-            .order_by(effective_date.asc(), Movimiento.id.asc())
+            .where(
+                Movimiento.caja_id == caja_id,
+                Movimiento.moneda == moneda,
+                impacta_saldo_expr(),
+            )
+            .order_by(effective_date_expr().asc(), Movimiento.id.asc())
             .with_for_update()
         ).all()
 
@@ -143,6 +282,8 @@ class MovimientoService:
         monto: Decimal | None = None,
         tipo: str | None = None,
         moneda: str | None = None,
+        instrumento: str | None = None,
+        fecha_liquidacion: date | None = None,
     ) -> Movimiento:
         movimiento = self.db.scalar(
             select(Movimiento)
@@ -155,6 +296,29 @@ class MovimientoService:
         if movimiento is None:
             raise MovimientoNotFoundError()
 
+        es_cheque = movimiento.instrumento in INSTRUMENTOS_CHEQUE
+        pendiente = es_cheque and movimiento.fecha_liquidado is None
+
+        # Instrument rules (checked before touching anything).
+        if instrumento is not None:
+            if instrumento not in INSTRUMENTOS_CHEQUE:
+                raise ValueError("instrumento inválido: solo 'cheque' o 'echeque'")
+            if not es_cheque:
+                raise ValueError(
+                    "un movimiento común no puede convertirse en cheque o echeque"
+                )
+        if fecha_liquidacion is not None:
+            if not es_cheque:
+                raise ValueError(
+                    "fecha_liquidacion solo corresponde a un cheque o echeque"
+                )
+            if not pendiente:
+                raise ValueError(
+                    "la fecha de liquidación de un cheque liquidado no se puede editar"
+                )
+            if fecha_liquidacion <= today_ar():
+                raise ValueError("fecha_liquidacion debe ser posterior a hoy")
+
         if descripcion is not None:
             cleaned_description = descripcion.strip()
             if not cleaned_description:
@@ -166,6 +330,10 @@ class MovimientoService:
             if tipo not in VALID_TIPOS:
                 raise ValueError("tipo inválido: debe ser 'entrada' o 'salida'")
             movimiento.tipo = tipo
+        if instrumento is not None:
+            movimiento.instrumento = instrumento
+        if fecha_liquidacion is not None:
+            movimiento.fecha_liquidacion = fecha_liquidacion
 
         # Detect whether the currency stream is changing before mutating.
         old_moneda = movimiento.moneda
@@ -175,11 +343,18 @@ class MovimientoService:
         movimiento.updated_at = datetime.now(timezone.utc)
         movimiento.updated_by = user.id
 
-        # Always recalculate the current (new) stream.
-        self.recalculate_subtotals(caja_id, moneda=movimiento.moneda)
-        # If the currency changed, also repair the stream that lost a row.
-        if moneda is not None and moneda != old_moneda:
-            self.recalculate_subtotals(caja_id, moneda=old_moneda)
+        # The session runs with autoflush disabled: persist the edit first so the replay
+        # queries below see the row in its new stream (otherwise a moneda change would
+        # leave the moved row with a stale subtotal).
+        self.db.flush()
+
+        # A pending cheque does not impact any balance: nothing to replay (Principle I).
+        if not pendiente:
+            # Always recalculate the current (new) stream.
+            self.recalculate_subtotals(caja_id, moneda=movimiento.moneda)
+            # If the currency changed, also repair the stream that lost a row.
+            if moneda is not None and moneda != old_moneda:
+                self.recalculate_subtotals(caja_id, moneda=old_moneda)
 
         self.db.flush()
         self.db.refresh(movimiento)
@@ -191,7 +366,8 @@ class MovimientoService:
         caja_id: int,
         movimiento_id: int,
         user: Usuario,
-    ) -> None:
+    ) -> Movimiento:
+        """Delete a movimiento and return it (already detached from the stream)."""
         movimiento = self.db.scalar(
             select(Movimiento)
             .where(
@@ -203,6 +379,11 @@ class MovimientoService:
         if movimiento is None:
             raise MovimientoNotFoundError()
 
+        # Only rows that impact the balance require replaying their stream.
+        impactaba_saldo = movimiento.subtotal is not None
+
         self.db.delete(movimiento)
         self.db.flush()
-        self.recalculate_subtotals(caja_id, moneda=movimiento.moneda)
+        if impactaba_saldo:
+            self.recalculate_subtotals(caja_id, moneda=movimiento.moneda)
+        return movimiento

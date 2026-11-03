@@ -249,3 +249,107 @@ async def test_saldo_caja_sin_movimientos_returns_zero_for_both(
     body = response.json()
     assert body.get("saldo_ars") is not None, "'saldo_ars' ausente en caja sin movimientos"
     assert body.get("saldo_usd") is not None, "'saldo_usd' ausente en caja sin movimientos"
+
+
+# ---------------------------------------------------------------------------
+# T006 — feature 010: paridad de /saldo y /saldo-general con saldo_service
+# ---------------------------------------------------------------------------
+
+
+async def _post_mov(client, headers, caja_id, *, tipo, monto, moneda="ARS", fecha_manual=None):
+    payload = {
+        "descripcion": f"parity {tipo}",
+        "monto": monto,
+        "tipo": tipo,
+        "moneda": moneda,
+    }
+    if fecha_manual:
+        payload["fecha_manual"] = fecha_manual
+    response = await client.post(
+        f"/api/v1/cajas/{caja_id}/movimientos", json=payload, headers=headers
+    )
+    assert response.status_code == 201, response.text
+    return response.json()["movimiento"]
+
+
+@pytest.mark.asyncio
+async def test_saldo_matches_sum_of_common_movements(
+    client: AsyncClient, secretaria_headers: dict[str, str], fresh_caja: dict
+) -> None:
+    caja_id = fresh_caja["id"]
+    await _post_mov(client, secretaria_headers, caja_id, tipo="entrada", monto="1000.00")
+    await _post_mov(client, secretaria_headers, caja_id, tipo="salida", monto="250.50")
+    await _post_mov(client, secretaria_headers, caja_id, tipo="entrada", monto="20.00", moneda="USD")
+
+    response = await client.get(f"/api/v1/cajas/{caja_id}/saldo", headers=secretaria_headers)
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["saldo_ars"] == "749.50"
+    assert body["saldo_usd"] == "20.00"
+
+
+@pytest.mark.asyncio
+async def test_saldo_correct_with_past_fecha_manual(
+    client: AsyncClient, secretaria_headers: dict[str, str], fresh_caja: dict
+) -> None:
+    caja_id = fresh_caja["id"]
+    await _post_mov(client, secretaria_headers, caja_id, tipo="entrada", monto="100.00")
+    await _post_mov(
+        client, secretaria_headers, caja_id,
+        tipo="entrada", monto="50.00", fecha_manual="2026-01-10",
+    )
+
+    response = await client.get(f"/api/v1/cajas/{caja_id}/saldo", headers=secretaria_headers)
+
+    assert response.json()["saldo_ars"] == "150.00"
+
+
+@pytest.mark.asyncio
+async def test_saldo_empty_caja_is_zero_and_has_no_last_movement(
+    client: AsyncClient, secretaria_headers: dict[str, str], fresh_caja: dict
+) -> None:
+    response = await client.get(
+        f"/api/v1/cajas/{fresh_caja['id']}/saldo", headers=secretaria_headers
+    )
+    body = response.json()
+    assert body["saldo_ars"] == "0.00"
+    assert body["saldo_usd"] == "0.00"
+    assert body["ultimo_movimiento_at"] is None
+
+
+@pytest.mark.asyncio
+async def test_ultimo_movimiento_at_uses_effective_date(
+    client: AsyncClient, secretaria_headers: dict[str, str], fresh_caja: dict
+) -> None:
+    """Un movimiento retroactivo cargado después NO es el 'último movimiento'."""
+    caja_id = fresh_caja["id"]
+    reciente = await _post_mov(client, secretaria_headers, caja_id, tipo="entrada", monto="100.00")
+    await _post_mov(
+        client, secretaria_headers, caja_id,
+        tipo="entrada", monto="50.00", fecha_manual="2026-01-10",
+    )
+
+    response = await client.get(f"/api/v1/cajas/{caja_id}/saldo", headers=secretaria_headers)
+
+    from datetime import datetime
+
+    ultimo = datetime.fromisoformat(response.json()["ultimo_movimiento_at"])
+    esperado = datetime.fromisoformat(reciente["fecha"])
+    assert ultimo == esperado
+
+
+@pytest.mark.asyncio
+async def test_saldo_general_matches_saldo_per_caja(
+    client: AsyncClient, secretaria_headers: dict[str, str], fresh_caja: dict
+) -> None:
+    caja_id = fresh_caja["id"]
+    await _post_mov(client, secretaria_headers, caja_id, tipo="entrada", monto="300.00")
+    await _post_mov(client, secretaria_headers, caja_id, tipo="entrada", monto="5.00", moneda="USD")
+
+    response = await client.get("/api/v1/cajas/saldo-general", headers=secretaria_headers)
+
+    assert response.status_code == 200
+    row = next(c for c in response.json()["cajas"] if c["caja"]["id"] == caja_id)
+    assert row["saldo_ars"] == "300.00"
+    assert row["saldo_usd"] == "5.00"

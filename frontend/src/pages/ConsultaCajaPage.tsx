@@ -3,8 +3,11 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import CajaConsultaSolapa from "../components/CajaConsultaSolapa";
 import CajaSelector from "../components/CajaSelector";
 import CajasAdicionalesSelector from "../components/CajasAdicionalesSelector";
+import ChequesPendientesBlock from "../components/ChequesPendientesBlock";
 import MovimientoTable from "../components/MovimientoTable";
 import Pagination from "../components/Pagination";
+import SaldoFuturoDesplegable from "../components/SaldoFuturoDesplegable";
+import ValorCajaTotal from "../components/ValorCajaTotal";
 import { useAuth } from "../hooks/useAuth";
 import {
   apiGet,
@@ -338,22 +341,34 @@ export default function ConsultaCajaPage() {
       {hasConsulted && !jointMode ? (
         <>
           <section className="saldo-panel page-block" data-block="saldo" aria-live="polite">
-            <h2>Valor de caja</h2>
-            {saldo ? (
-              <div className="saldo-dual">
-                <p className="saldo-valor">
-                  <span className="saldo-moneda-label">ARS</span>
-                  {` $ ${saldo.saldo_ars}`}
-                </p>
-                <p className="saldo-valor">
-                  <span className="saldo-moneda-label">USD</span>
-                  {` $ ${saldo.saldo_usd}`}
-                </p>
+            <div className="saldo-panel__row">
+              <div className="saldo-panel__actual">
+                <h2>Valor de caja</h2>
+                {saldo ? (
+                  <div className="saldo-dual">
+                    <p className="saldo-valor">
+                      <span className="saldo-moneda-label">ARS</span>
+                      {` $ ${saldo.saldo_ars}`}
+                    </p>
+                    <p className="saldo-valor">
+                      <span className="saldo-moneda-label">USD</span>
+                      {` $ ${saldo.saldo_usd}`}
+                    </p>
+                  </div>
+                ) : (
+                  <p className="saldo-valor">{loadingConsulta ? "Cargando…" : "—"}</p>
+                )}
               </div>
-            ) : (
-              <p className="saldo-valor">{loadingConsulta ? "Cargando…" : "—"}</p>
-            )}
+              <ValorCajaTotal cajaId={selectedCajaId} fecha={filtroFechaHasta} />
+            </div>
+            <SaldoFuturoDesplegable cajaId={selectedCajaId} />
           </section>
+
+          <div className="page-block" data-block="cheques-pendientes">
+            {selectedCajaId ? (
+              <ChequesPendientesBlock cajaId={selectedCajaId} readOnly />
+            ) : null}
+          </div>
 
           <div className="page-block movimiento-filtros" data-block="filtros">
             <label className="field field--inline" htmlFor="filtro-moneda">

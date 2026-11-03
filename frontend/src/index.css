@@ -362,6 +362,14 @@ select {
   color: #5b6477;
 }
 
+/* Toggle "Cheques pendientes" next to the filters (Registro). */
+.movimiento-filtros .filtro-pendientes {
+  align-self: flex-end;
+  min-height: 2.1rem;
+  padding: 0.35rem 0.9rem;
+  font-size: 0.9rem;
+}
+
 .movimiento-filtros select,
 .movimiento-filtros input[type="date"] {
   padding: 0.35rem 0.5rem;
@@ -658,6 +666,15 @@ select {
 
 .btn-table-action-edit:hover {
   background: #0d3f6a;
+}
+
+/* Disabled actions (e.g. Liquidar before the fecha de liquidación) look greyed out. */
+.btn-table-action:disabled,
+.btn-table-action:disabled:hover {
+  background: #e3e7ee;
+  color: #8a93a5;
+  border-color: #e3e7ee;
+  cursor: not-allowed;
 }
 
 .btn-table-action-delete {
@@ -1192,5 +1209,249 @@ select {
     display: flex;
     flex-wrap: wrap;
     gap: 0.5rem;
+  }
+}
+
+/* ── 010: Instrumento (Cheque / Echeque) ───────────────────────────────── */
+
+/* Form grid: + Instrumento column, and either "Fecha de liquidación" or the third button */
+.movimiento-form {
+  grid-template-columns:
+    minmax(12rem, 2fr) minmax(8rem, 1fr) minmax(5rem, auto) minmax(9rem, auto)
+    minmax(7rem, auto) auto auto auto;
+}
+
+.movimiento-form__fecha-liquidacion {
+  min-width: 9rem;
+}
+
+/* Medium desktop widths: let fields and buttons wrap instead of overflowing */
+@media screen and (min-width: 769px) and (max-width: 1360px) {
+  .movimiento-form {
+    grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+  }
+
+  .movimiento-form__descripcion {
+    grid-column: span 2;
+  }
+}
+
+@media screen and (max-width: 768px) {
+  .movimiento-form__instrumento,
+  .movimiento-form__fecha-liquidacion {
+    grid-column: 1 / -1;
+  }
+}
+
+.instrumento-badge,
+.estado-badge {
+  display: inline-block;
+  padding: 0.1rem 0.5rem;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  vertical-align: middle;
+}
+
+.instrumento-badge {
+  background: #e8f0fa;
+  color: #0f4c81;
+}
+
+.estado-badge--pendiente {
+  background: #fff4e0;
+  color: #9a5b00;
+}
+
+.movimiento-fecha-liquidacion {
+  display: block;
+  margin-top: 0.15rem;
+  font-size: 0.78rem;
+  color: #5b6477;
+}
+
+.estado-badge--liquidado {
+  background: #e6f4ea;
+  color: var(--color-success);
+}
+
+/* ── 010: bloque de cheques pendientes ─────────────────────────────────── */
+
+.cheques-pendientes h2 {
+  margin: 1.5rem 0 0;
+  font-size: 1rem;
+  font-weight: 600;
+  color: #5b6477;
+}
+
+.cheques-pendientes .cheques-table {
+  margin-top: 0.5rem;
+}
+
+/* Only "Monto" is right-aligned (the generic table also right-aligns column 3) */
+.cheques-table th:nth-child(3),
+.cheques-table td:nth-child(3) {
+  text-align: left;
+}
+
+/* ── 010: sección Cheques (todas las cajas) ────────────────────────────── */
+
+.cheques-seccion-table {
+  margin-top: 0.5rem;
+}
+
+/* Separación entre los listados de la página Cheques (el stack no define gap). */
+.page-block[data-block^="cheques-"] + .page-block[data-block^="cheques-"] {
+  margin-top: 2rem;
+}
+
+.page-block[data-block^="cheques-"] > h2 {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: #5b6477;
+}
+
+/* Generic table right-aligns columns 2-3; here only "Monto" (column 6) is numeric. */
+.cheques-seccion-table th:nth-child(2),
+.cheques-seccion-table th:nth-child(3),
+.cheques-seccion-table td:nth-child(2),
+.cheques-seccion-table td:nth-child(3) {
+  text-align: left;
+}
+
+.cheques-seccion-table th:nth-child(6),
+.cheques-seccion-table td:nth-child(6) {
+  text-align: right;
+  white-space: nowrap;
+}
+
+@media screen and (max-width: 768px) {
+  .cheques-seccion-table th:nth-child(6),
+  .cheques-seccion-table td:nth-child(6) {
+    text-align: left;
+  }
+}
+
+/* ── 010: desplegable "Saldo a futuro" (dentro de Valor de caja) ───────── */
+
+.saldo-futuro {
+  margin-top: 1rem;
+  border-top: 1px solid #e3e7ee;
+  padding-top: 0.75rem;
+}
+
+.saldo-futuro > summary {
+  cursor: pointer;
+  font-weight: 600;
+  color: #0f4c81;
+  list-style-position: inside;
+}
+
+.saldo-futuro__body {
+  display: grid;
+  gap: 1rem;
+  margin-top: 0.75rem;
+}
+
+.saldo-futuro__status {
+  margin: 0;
+  color: #5b6477;
+}
+
+.saldo-futuro__moneda h3 {
+  margin: 0 0 0.5rem;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #5b6477;
+}
+
+.saldo-futuro-table__hoy td {
+  font-weight: 600;
+}
+
+/* Generic table right-aligns columns 2-3; here Detalle is text and Efecto/Saldo are numeric. */
+.saldo-futuro-table th:nth-child(2),
+.saldo-futuro-table td:nth-child(2) {
+  text-align: left;
+}
+
+.saldo-futuro-table th:nth-child(n + 3),
+.saldo-futuro-table td:nth-child(n + 3) {
+  text-align: right;
+}
+
+.saldo-futuro-detalle {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.25rem;
+}
+
+.saldo-futuro-detalle__descripcion {
+  overflow-wrap: anywhere;
+}
+
+@media screen and (max-width: 768px) {
+  .saldo-futuro-table th:nth-child(n + 3),
+  .saldo-futuro-table td:nth-child(n + 3) {
+    text-align: left;
+  }
+}
+
+.estado-badge--vencido {
+  background: #fdecea;
+  color: var(--color-danger);
+}
+
+/* Valor de caja: columna actual + "Valor de caja total" a la derecha */
+.saldo-panel__row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.5rem 3rem;
+  align-items: flex-start;
+}
+
+.saldo-panel__actual {
+  flex: 0 1 auto;
+}
+
+.valor-caja-total {
+  flex: 1 1 18rem;
+  padding-left: 1.5rem;
+  border-left: 1px solid #e3e7ef;
+}
+
+.valor-caja-total h2 {
+  margin-bottom: 0.5rem;
+}
+
+.valor-caja-total .field {
+  max-width: 12rem;
+  margin-bottom: 0.5rem;
+}
+
+.valor-caja-total__hint {
+  margin: 0.25rem 0 0;
+  font-size: 0.8125rem;
+  color: #5b6477;
+}
+
+.valor-caja-total__error {
+  margin: 0.25rem 0 0;
+  font-size: 0.875rem;
+  color: #b3261e;
+}
+
+@media (max-width: 640px) {
+  .valor-caja-total {
+    flex-basis: 100%;
+    padding-left: 0;
+    padding-top: 1rem;
+    border-left: none;
+    border-top: 1px solid #e3e7ef;
   }
 }

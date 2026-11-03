@@ -2,6 +2,7 @@ import { Navigate, Outlet, Route, Routes } from "react-router-dom";
 
 import { Navbar } from "./components/layout/Navbar";
 import { useAuth } from "./hooks/useAuth";
+import ChequesPage from "./pages/ChequesPage";
 import ConfiguracionCajasPage from "./pages/ConfiguracionCajasPage";
 import ConsultaCajaPage from "./pages/ConsultaCajaPage";
 import ConsultaPlazosFijosPage from "./pages/ConsultaPlazosFijosPage";
@@ -96,6 +97,7 @@ export default function App() {
         />
         <Route path="/consulta" element={<ConsultaCajaPage />} />
         <Route path="/consulta-plazos-fijos" element={<ConsultaPlazosFijosPage />} />
+        <Route path="/cheques" element={<ChequesPage />} />
         <Route path="/impresion" element={<ImpresionPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />

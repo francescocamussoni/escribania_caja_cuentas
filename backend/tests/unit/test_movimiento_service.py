@@ -635,3 +635,82 @@ def test_create_movimiento_queries_with_coalesce_order() -> None:
 
     # Verify that the DB scalar query was called (ordering verified by integration test T024)
     assert db.scalar.called, "Se esperaba una llamada a db.scalar para buscar el último movimiento"
+
+
+# ---------------------------------------------------------------------------
+# T007 — feature 010: el stream ignora cheques pendientes y ordena por fecha efectiva
+# ---------------------------------------------------------------------------
+
+from datetime import datetime, timezone  # noqa: E402
+
+from sqlalchemy.dialects import postgresql  # noqa: E402
+
+
+def _sql(statement) -> str:
+    return str(statement.compile(dialect=postgresql.dialect())).lower()
+
+
+def test_create_movimiento_stream_lookup_ignores_rows_without_subtotal() -> None:
+    service, db = _make_service_with_last(_make_mock_movimiento(Decimal("100.00")))
+
+    service.create_movimiento(
+        caja_id=1, descripcion="x", monto=Decimal("10.00"), tipo="entrada", user=_make_user()
+    )
+
+    sql = _sql(db.scalar.call_args[0][0])
+    assert "subtotal is not null" in sql
+
+
+def test_create_movimiento_stream_lookup_orders_by_fecha_efectiva() -> None:
+    service, db = _make_service_with_last(None)
+
+    service.create_movimiento(
+        caja_id=1, descripcion="x", monto=Decimal("10.00"), tipo="entrada", user=_make_user()
+    )
+
+    sql = _sql(db.scalar.call_args[0][0])
+    assert "coalesce(movimiento.fecha_liquidado, movimiento.fecha_override, movimiento.created_at)" in sql
+
+
+def test_recalculate_subtotals_only_considers_rows_that_impact_saldo() -> None:
+    db = MagicMock()
+    db.scalars.return_value.all.return_value = []
+    service = MovimientoService(db=db)
+
+    service.recalculate_subtotals(1, moneda="ARS")
+
+    sql = _sql(db.scalars.call_args[0][0])
+    # Filtra por ESTADO (común o liquidado), no por subtotal almacenado: al liquidar,
+    # el cheque entra al stream antes de tener su subtotal definitivo.
+    assert "movimiento.instrumento" in sql
+    assert "movimiento.fecha_liquidado is not null" in sql
+    assert "coalesce(movimiento.fecha_liquidado, movimiento.fecha_override, movimiento.created_at)" in sql
+
+
+def test_create_movimiento_with_fecha_override_recalculates_stream() -> None:
+    service, _ = _make_service_with_last(None)
+    override = datetime(2026, 1, 10, 9, 0, tzinfo=timezone.utc)
+
+    with patch.object(service, "recalculate_subtotals") as recalc:
+        service.create_movimiento(
+            caja_id=7,
+            descripcion="retro",
+            monto=Decimal("10.00"),
+            tipo="entrada",
+            moneda="USD",
+            fecha_override=override,
+            user=_make_user(),
+        )
+
+    recalc.assert_called_once_with(7, moneda="USD")
+
+
+def test_create_movimiento_without_fecha_override_does_not_recalculate() -> None:
+    service, _ = _make_service_with_last(None)
+
+    with patch.object(service, "recalculate_subtotals") as recalc:
+        service.create_movimiento(
+            caja_id=7, descripcion="x", monto=Decimal("10.00"), tipo="entrada", user=_make_user()
+        )
+
+    recalc.assert_not_called()

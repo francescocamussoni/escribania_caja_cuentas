@@ -1,9 +1,12 @@
 import type { Movimiento } from "../services/api";
+import { formatFechaIso, llegoFechaLiquidacion } from "../utils/fechas";
 
 type MovimientoTableProps = {
   movimientos: Movimiento[];
   onEdit?: (movimiento: Movimiento) => void;
   onDelete?: (movimiento: Movimiento) => void;
+  /** Liquidate a pending cheque listed among the movimientos (Registro only). */
+  onLiquidar?: (movimiento: Movimiento) => void;
 };
 
 function formatFecha(fecha: string): string {
@@ -24,8 +27,10 @@ export default function MovimientoTable({
   movimientos,
   onEdit,
   onDelete,
+  onLiquidar,
 }: MovimientoTableProps) {
-  const showActions = Boolean(onEdit || onDelete);
+  const showActions = Boolean(onEdit || onDelete || onLiquidar);
+  const showValorTotal = movimientos.some((m) => m.valor_total != null);
 
   return (
     <table className="movimiento-table">
@@ -34,6 +39,7 @@ export default function MovimientoTable({
           <th>Descripción</th>
           <th>Monto</th>
           <th>Subtotal</th>
+          {showValorTotal ? <th>Valor de caja total</th> : null}
           <th>Fecha</th>
           {showActions ? (
             <th className="movimiento-table-actions-header">Acciones</th>
@@ -43,7 +49,7 @@ export default function MovimientoTable({
       <tbody>
         {movimientos.length === 0 ? (
           <tr>
-            <td colSpan={showActions ? 5 : 4} className="movimiento-table-empty">
+            <td colSpan={(showActions ? 5 : 4) + (showValorTotal ? 1 : 0)} className="movimiento-table-empty">
               No hay movimientos registrados.
             </td>
           </tr>
@@ -59,15 +65,53 @@ export default function MovimientoTable({
                   : "movimiento-salida"
               }
             >
+              {movimiento.instrumento === "cheque" ||
+              movimiento.instrumento === "echeque" ? (
+                <>
+                  <span className="instrumento-badge">
+                    {movimiento.instrumento === "cheque" ? "Cheque" : "Echeque"}
+                  </span>{" "}
+                  {movimiento.estado === "pendiente" ? (
+                    <span className="estado-badge estado-badge--pendiente">Pendiente</span>
+                  ) : (
+                    <span className="estado-badge estado-badge--liquidado">Liquidado</span>
+                  )}{" "}
+                </>
+              ) : null}
               {movimiento.tipo === "salida" ? "-" : ""}
               {movimiento.monto}{" "}
               <span className="movimiento-moneda-badge">{movimiento.moneda}</span>
             </td>
-            <td data-label="Subtotal">{movimiento.subtotal}</td>
-            <td data-label="Fecha">{formatFecha(movimiento.fecha)}</td>
+            <td data-label="Subtotal">{movimiento.subtotal ?? "—"}</td>
+            {showValorTotal ? (
+              <td data-label="Valor de caja total">{movimiento.valor_total ?? "—"}</td>
+            ) : null}
+            <td data-label="Fecha">
+              {formatFecha(movimiento.fecha)}
+              {movimiento.estado === "pendiente" && movimiento.fecha_liquidacion ? (
+                <span className="movimiento-fecha-liquidacion">
+                  Liquida el {formatFechaIso(movimiento.fecha_liquidacion)}
+                </span>
+              ) : null}
+            </td>
             {showActions ? (
               <td className="movimiento-table-actions" data-label="Acciones">
                 <div className="movimiento-table-actions-inner">
+                  {movimiento.liquidable && onLiquidar ? (
+                    <button
+                      type="button"
+                      className="btn-table-action btn-table-action-edit"
+                      onClick={() => onLiquidar(movimiento)}
+                      disabled={!llegoFechaLiquidacion(movimiento.fecha_liquidacion)}
+                      title={
+                        llegoFechaLiquidacion(movimiento.fecha_liquidacion)
+                          ? undefined
+                          : `Disponible desde el ${formatFechaIso(movimiento.fecha_liquidacion)}`
+                      }
+                    >
+                      Liquidar
+                    </button>
+                  ) : null}
                   {movimiento.editable && onEdit ? (
                     <button
                       type="button"

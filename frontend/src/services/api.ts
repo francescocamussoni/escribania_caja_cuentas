@@ -121,16 +121,30 @@ export type CajaSaldoGeneral = {
   cajas: CajaSaldoGeneralItem[];
 };
 
+export type Instrumento = "ninguno" | "cheque" | "echeque";
+export type EstadoCheque = "pendiente" | "liquidado" | null;
+
 export type Movimiento = {
   id: number;
   descripcion: string;
   monto: string;
   tipo: "entrada" | "salida";
   moneda: "ARS" | "USD";
-  subtotal: string;
+  // null only for pending cheques (they do not impact the balance)
+  subtotal: string | null;
+  /** Running "Valor de caja total" (with pending cheques). Secretaria's Registro only. */
+  valor_total?: string | null;
+  // Effective date: fecha_liquidado > fecha manual > created_at
   fecha: string;
   editable: boolean;
   caja: Caja;
+  instrumento: Instrumento;
+  estado: EstadoCheque;
+  fecha_carga: string;
+  fecha_liquidacion: string | null;
+  fecha_liquidado: string | null;
+  // true when the cheque is pending and the current user can settle it
+  liquidable: boolean;
 };
 
 export type MovimientoCreateResponse = {
@@ -154,6 +168,10 @@ export type CreateMovimientoPayload = {
   registrar_complementario?: boolean;
   // T039 (US3): Fecha manual opcional — formato YYYY-MM-DD
   fecha_manual?: string;
+  // 010: Cheque/Echeque. Omit (or "ninguno") keeps the previous behaviour.
+  instrumento?: Instrumento;
+  // 010: required (and > today) when instrumento is cheque/echeque — YYYY-MM-DD
+  fecha_liquidacion?: string;
 };
 
 export type UpdateMovimientoPayload = {
@@ -161,7 +179,57 @@ export type UpdateMovimientoPayload = {
   monto?: string;
   tipo?: "entrada" | "salida";
   moneda?: "ARS" | "USD";
+  // 010: only Cheque <-> Echeque; never "ninguno"
+  instrumento?: "cheque" | "echeque";
+  // 010: only pending cheques; must be > today — YYYY-MM-DD
+  fecha_liquidacion?: string;
 };
+
+export type SaldoFuturoDetalle = {
+  descripcion: string;
+  instrumento: "cheque" | "echeque";
+  tipo: "entrada" | "salida";
+  monto: string;
+};
+
+export type SaldoFuturoFila = {
+  fecha_liquidacion: string;
+  vencido: boolean;
+  cheques: number;
+  efecto_neto: string;
+  saldo_proyectado: string;
+  /** The pending cheques settling on this date (what was entered). */
+  detalle: SaldoFuturoDetalle[];
+};
+
+export type SaldoFuturoMoneda = {
+  moneda: "ARS" | "USD";
+  saldo_actual: string;
+  filas: SaldoFuturoFila[];
+};
+
+export type SaldoFuturo = {
+  caja: Caja;
+  fecha_calculo: string;
+  monedas: SaldoFuturoMoneda[];
+};
+
+export type SaldoProyectadoMoneda = {
+  moneda: "ARS" | "USD";
+  saldo_actual: string;
+  efecto_cheques: string;
+  saldo_proyectado: string;
+  cheques: number;
+};
+
+export type SaldoProyectado = {
+  caja: Caja;
+  /** null = no date chosen: every pending cheque is included. */
+  fecha: string | null;
+  monedas: SaldoProyectadoMoneda[];
+};
+
+export type ChequeCategoria = "aptos" | "proximos";
 
 export type PlazoFijo = {
   id: number;
@@ -328,6 +396,50 @@ export async function deleteMovimiento(
   movimientoId: number,
 ): Promise<void> {
   return apiDelete(`/api/v1/cajas/${cajaId}/movimientos/${movimientoId}`);
+}
+
+export async function fetchChequesPendientes(
+  cajaId: number,
+  page: number,
+  filtros?: MovimientoFiltros,
+): Promise<PaginatedMovimientos> {
+  const params = new URLSearchParams({ page: String(page) });
+  if (filtros?.moneda) params.set("moneda", filtros.moneda);
+  if (filtros?.fecha_desde) params.set("fecha_desde", filtros.fecha_desde);
+  if (filtros?.fecha_hasta) params.set("fecha_hasta", filtros.fecha_hasta);
+  return apiGet<PaginatedMovimientos>(
+    `/api/v1/cajas/${cajaId}/cheques-pendientes?${params.toString()}`,
+  );
+}
+
+export async function fetchCheques(
+  categoria: ChequeCategoria,
+  page: number,
+): Promise<PaginatedMovimientos> {
+  const params = new URLSearchParams({ categoria, page: String(page) });
+  return apiGet<PaginatedMovimientos>(`/api/v1/cheques?${params.toString()}`);
+}
+
+export async function liquidarCheque(
+  cajaId: number,
+  movimientoId: number,
+): Promise<Movimiento> {
+  return apiPost<Movimiento>(
+    `/api/v1/cajas/${cajaId}/movimientos/${movimientoId}/liquidar`,
+    {},
+  );
+}
+
+export async function fetchSaldoFuturo(cajaId: number): Promise<SaldoFuturo> {
+  return apiGet<SaldoFuturo>(`/api/v1/cajas/${cajaId}/saldo-futuro`);
+}
+
+export async function fetchSaldoProyectado(
+  cajaId: number,
+  fecha?: string,
+): Promise<SaldoProyectado> {
+  const query = fecha ? `?fecha=${encodeURIComponent(fecha)}` : "";
+  return apiGet<SaldoProyectado>(`/api/v1/cajas/${cajaId}/saldo-proyectado${query}`);
 }
 
 export async function fetchPlazosFijosResumen(

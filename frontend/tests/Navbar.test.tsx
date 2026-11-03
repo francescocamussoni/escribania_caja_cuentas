@@ -163,6 +163,7 @@ describe("Navbar", () => {
       "Plazos fijos",
       "Consulta",
       "Consulta plazos fijos",
+      "Cheques",
       "Impresión",
       "Configuración",
       "Salir",
@@ -189,8 +190,46 @@ describe("Navbar", () => {
     expect(labels).toEqual([
       "Consulta",
       "Consulta plazos fijos",
+      "Cheques",
       "Impresión",
       "Salir",
+    ]);
+  });
+
+  it("T045: places Cheques between Consulta plazos fijos and Impresión for both roles", () => {
+    const { rerender } = render(
+      <MemoryRouter>
+        <Navbar />
+      </MemoryRouter>,
+    );
+    const linkLabels = () =>
+      Array.from(document.querySelectorAll(".navbar__links a")).map((el) =>
+        el.textContent?.trim(),
+      );
+
+    expect(linkLabels()).toEqual([
+      "Registro",
+      "Plazos fijos",
+      "Consulta",
+      "Consulta plazos fijos",
+      "Cheques",
+      "Impresión",
+    ]);
+    expect(screen.getByRole("link", { name: "Cheques" })).toHaveAttribute("href", "/cheques");
+
+    authState.rol = "escribano";
+    authState.username = "escribano";
+    rerender(
+      <MemoryRouter>
+        <Navbar />
+      </MemoryRouter>,
+    );
+
+    expect(linkLabels()).toEqual([
+      "Consulta",
+      "Consulta plazos fijos",
+      "Cheques",
+      "Impresión",
     ]);
   });
 

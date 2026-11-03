@@ -7,12 +7,18 @@ from sqlalchemy.orm import Session
 
 from app.core.dates import today_ar
 from app.models.caja import Caja
-from app.models.movimiento import Movimiento
+from app.models.movimiento import Movimiento, cheque_pendiente_expr, effective_date_expr
 from app.models.plazo_fijo import PlazoFijo
 from app.schemas.informe import InformeModo, InformePdfRequest
+from app.services.cheque_service import build_saldo_futuro
 from app.services.plazo_fijo_service import PlazosFijosResumen, _list_order_clauses
+from app.services.saldo_futuro import FilaSaldoFuturo
+from app.services.saldo_service import get_saldo_actual
 
 AR_TZ = "America/Argentina/Buenos_Aires"
+
+# Defensive cap for the "Cheques pendientes" section of the PDF.
+MAX_CHEQUES_PENDIENTES_INFORME = 1000
 
 
 class InformeDateRangeError(ValueError):
@@ -55,7 +61,7 @@ def resolve_date_range(
 def compute_saldo_cierre(movimientos: list[Movimiento]) -> Decimal | None:
     if not movimientos:
         return None
-    latest = max(movimientos, key=lambda movimiento: (movimiento.created_at, movimiento.id))
+    latest = max(movimientos, key=lambda movimiento: (movimiento.fecha_efectiva, movimiento.id))
     return latest.subtotal
 
 
@@ -67,12 +73,13 @@ def compute_saldo_cierre_by_moneda(
     filtered = [m for m in movimientos if m.moneda == moneda]
     if not filtered:
         return None
-    latest = max(filtered, key=lambda m: (m.created_at, m.id))
+    latest = max(filtered, key=lambda m: (m.fecha_efectiva, m.id))
     return latest.subtotal
 
 
 def _movimiento_ar_date():
-    return cast(func.timezone(AR_TZ, Movimiento.created_at), Date)
+    """Effective date (liquidation > manual > creation) as an Argentina calendar date."""
+    return cast(func.timezone(AR_TZ, effective_date_expr()), Date)
 
 
 def _plazo_ar_date():
@@ -119,42 +126,50 @@ class InformeService:
         date_from: date,
         date_to: date,
     ) -> list[Movimiento]:
+        """Movements that impact the balance (pending cheques are excluded), by effective date."""
         movimiento_date = _movimiento_ar_date()
         return list(
             self.db.scalars(
                 select(Movimiento)
                 .where(
                     Movimiento.caja_id == caja_id,
+                    Movimiento.subtotal.is_not(None),
                     movimiento_date >= date_from,
                     movimiento_date <= date_to,
                 )
-                .order_by(Movimiento.created_at.desc(), Movimiento.id.desc())
+                .order_by(effective_date_expr().desc(), Movimiento.id.desc())
             ).all()
         )
 
-    def fetch_saldo_actual(self, caja_id: int) -> Decimal:
-        last_movimiento = self.db.scalar(
-            select(Movimiento)
-            .where(Movimiento.caja_id == caja_id)
-            .order_by(Movimiento.created_at.desc(), Movimiento.id.desc())
-        )
-        return last_movimiento.subtotal if last_movimiento else Decimal("0")
-
     def fetch_saldo_ars(self, caja_id: int) -> Decimal:
-        last = self.db.scalar(
-            select(Movimiento)
-            .where(Movimiento.caja_id == caja_id, Movimiento.moneda == "ARS")
-            .order_by(Movimiento.created_at.desc(), Movimiento.id.desc())
-        )
-        return last.subtotal if last else Decimal("0")
+        return get_saldo_actual(self.db, caja_id, "ARS")
 
     def fetch_saldo_usd(self, caja_id: int) -> Decimal:
-        last = self.db.scalar(
+        return get_saldo_actual(self.db, caja_id, "USD")
+
+    def fetch_cheques_pendientes(self, caja_id: int) -> tuple[list[Movimiento], int]:
+        """Pending cheques of the caja (current state, not filtered by period).
+
+        Returns (items, total): items are capped at `MAX_CHEQUES_PENDIENTES_INFORME`.
+        """
+        condition = cheque_pendiente_expr() & (Movimiento.caja_id == caja_id)
+        total = self.db.scalar(select(func.count()).select_from(Movimiento).where(condition)) or 0
+        items = self.db.scalars(
             select(Movimiento)
-            .where(Movimiento.caja_id == caja_id, Movimiento.moneda == "USD")
-            .order_by(Movimiento.created_at.desc(), Movimiento.id.desc())
-        )
-        return last.subtotal if last else Decimal("0")
+            .where(condition)
+            .order_by(Movimiento.fecha_liquidacion.asc(), Movimiento.id.asc())
+            .limit(MAX_CHEQUES_PENDIENTES_INFORME)
+        ).all()
+        return list(items), total
+
+    def fetch_saldo_futuro(
+        self,
+        caja_id: int,
+        *,
+        hoy: date | None = None,
+    ) -> dict[str, tuple[Decimal, list[FilaSaldoFuturo]]]:
+        """Same projection as `GET /cajas/{id}/saldo-futuro` (shared function)."""
+        return build_saldo_futuro(self.db, caja_id, hoy if hoy is not None else today_ar())
 
     @staticmethod
     def compute_saldo_cierre(movimientos: list[Movimiento]) -> Decimal | None:

@@ -12,6 +12,7 @@ const links = [
     label: "Consulta plazos fijos",
     roles: ["secretaria", "escribano"],
   },
+  { to: "/cheques", label: "Cheques", roles: ["secretaria", "escribano"] },
   { to: "/impresion", label: "Impresión", roles: ["secretaria", "escribano"] },
 ] as const;
 

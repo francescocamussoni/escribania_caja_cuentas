@@ -5,6 +5,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from app.core.dates import today_ar
 from app.models.movimiento import Movimiento
 from app.models.usuario import Usuario
 from app.schemas.caja import CajaResponse
@@ -14,6 +15,20 @@ FECHA_MANUAL_PATTERN = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
 # Shared literal for all schemas; only ARS and USD are valid currencies.
 Moneda = Literal["ARS", "USD"]
+
+# Instrumento of a movimiento ("-" in the UI is "ninguno"). Cheque/Echeque are settled later.
+Instrumento = Literal["ninguno", "cheque", "echeque"]
+EstadoCheque = Literal["pendiente", "liquidado"]
+
+
+def _parse_calendar_date(value: str, field: str) -> date:
+    """Strict YYYY-MM-DD → real calendar date (shared by fecha_manual / fecha_liquidacion)."""
+    if not FECHA_MANUAL_PATTERN.match(value):
+        raise ValueError(f"{field} debe tener formato YYYY-MM-DD (e.g. '2026-09-01')")
+    try:
+        return date.fromisoformat(value)
+    except ValueError as exc:
+        raise ValueError(f"{field} no es una fecha válida: {value}") from exc
 
 
 class CreateMovimientoRequest(BaseModel):
@@ -25,6 +40,9 @@ class CreateMovimientoRequest(BaseModel):
     moneda: Moneda = "ARS"
     registrar_complementario: bool = False
     fecha_manual: str | None = None  # T027: formato YYYY-MM-DD opcional (US3)
+    # 010: "ninguno" keeps the previous behaviour; cheque/echeque are created PENDING.
+    instrumento: Instrumento = "ninguno"
+    fecha_liquidacion: str | None = None  # YYYY-MM-DD, required (and > today) for cheques
 
     @field_validator("descripcion")
     @classmethod
@@ -54,14 +72,33 @@ class CreateMovimientoRequest(BaseModel):
         """T027: Valida que fecha_manual tenga formato estricto YYYY-MM-DD."""
         if value is None:
             return value
-        if not FECHA_MANUAL_PATTERN.match(value):
-            raise ValueError("fecha_manual debe tener formato YYYY-MM-DD (e.g. '2026-09-01')")
-        # Validate it's a real calendar date
-        try:
-            date.fromisoformat(value)
-        except ValueError as exc:
-            raise ValueError(f"fecha_manual no es una fecha válida: {value}") from exc
+        _parse_calendar_date(value, "fecha_manual")
         return value
+
+    @field_validator("fecha_liquidacion")
+    @classmethod
+    def validate_fecha_liquidacion_format(cls, value: str | None) -> str | None:
+        if value is None:
+            return value
+        _parse_calendar_date(value, "fecha_liquidacion")
+        return value
+
+    @model_validator(mode="after")
+    def validate_instrumento_rules(self) -> "CreateMovimientoRequest":
+        if self.instrumento == "ninguno":
+            if self.fecha_liquidacion is not None:
+                raise ValueError(
+                    "fecha_liquidacion solo corresponde a un cheque o echeque"
+                )
+            return self
+
+        if self.fecha_liquidacion is None:
+            raise ValueError("fecha_liquidacion es obligatoria para cheque o echeque")
+        if _parse_calendar_date(self.fecha_liquidacion, "fecha_liquidacion") <= today_ar():
+            raise ValueError("fecha_liquidacion debe ser posterior a hoy")
+        if self.registrar_complementario:
+            raise ValueError("un cheque o echeque no admite 'Entrada y Salida'")
+        return self
 
 
 class UpdateMovimientoRequest(BaseModel):
@@ -71,6 +108,11 @@ class UpdateMovimientoRequest(BaseModel):
     monto: str | None = None
     tipo: str | None = None
     moneda: Moneda | None = None
+    # 010: a cheque can only switch between cheque and echeque ("ninguno" is not accepted:
+    # a movement never becomes a common one again, nor a common one a cheque).
+    instrumento: Literal["cheque", "echeque"] | None = None
+    # Only editable on pending cheques; same rules as on creation (> today).
+    fecha_liquidacion: str | None = None
 
     @model_validator(mode="after")
     def validate_at_least_one_field(self) -> "UpdateMovimientoRequest":
@@ -79,9 +121,20 @@ class UpdateMovimientoRequest(BaseModel):
             and self.monto is None
             and self.tipo is None
             and self.moneda is None
+            and self.instrumento is None
+            and self.fecha_liquidacion is None
         ):
             raise ValueError("debe enviar al menos un campo para actualizar")
         return self
+
+    @field_validator("fecha_liquidacion")
+    @classmethod
+    def validate_fecha_liquidacion(cls, value: str | None) -> str | None:
+        if value is None:
+            return value
+        if _parse_calendar_date(value, "fecha_liquidacion") <= today_ar():
+            raise ValueError("fecha_liquidacion debe ser posterior a hoy")
+        return value
 
     @field_validator("descripcion")
     @classmethod
@@ -118,10 +171,21 @@ class MovimientoResponse(BaseModel):
     monto: str
     tipo: str
     moneda: Moneda
-    subtotal: str
+    # None only for pending cheques (they do not impact the balance).
+    subtotal: str | None
+    # Effective date: fecha_liquidado > fecha manual > created_at (pending: fecha de carga).
     fecha: datetime
     editable: bool
     caja: CajaResponse
+    instrumento: Instrumento = "ninguno"
+    estado: EstadoCheque | None = None
+    fecha_carga: datetime
+    fecha_liquidacion: date | None = None
+    fecha_liquidado: datetime | None = None
+    # True when the cheque is pending and the user can settle it (secretaria).
+    liquidable: bool = False
+    # Running "Valor de caja total" (settled + pending cheques). Secretaria's Registro list only.
+    valor_total: str | None = None
 
 
 class MovimientoCreateResponse(BaseModel):
@@ -152,12 +216,23 @@ def movimiento_to_response(movimiento: Movimiento, user: Usuario) -> MovimientoR
 
     _AR_TZ = ZoneInfo("America/Argentina/Buenos_Aires")
 
-    # T033: Return fecha_override (in AR timezone) when present; else fall back to created_at.
-    # Converts to AR timezone so the serialized offset is -03:00 (not UTC Z).
-    if movimiento.fecha_override is not None:
-        fecha = movimiento.fecha_override.astimezone(_AR_TZ)
-    else:
-        fecha = movimiento.created_at
+    def _to_ar(value: datetime) -> datetime:
+        # Serialized with the Argentina offset (-03:00) instead of UTC "Z".
+        return value.astimezone(_AR_TZ)
+
+    # fecha de carga: manual date when present, else the INSERT time.
+    # (created_at keeps its stored offset, as before, when there is no manual date.)
+    fecha_carga = (
+        _to_ar(movimiento.fecha_override)
+        if movimiento.fecha_override is not None
+        else movimiento.created_at
+    )
+    # Effective date: a settled cheque is placed by its liquidation time.
+    fecha = (
+        _to_ar(movimiento.fecha_liquidado)
+        if movimiento.fecha_liquidado is not None
+        else fecha_carga
+    )
 
     return MovimientoResponse(
         id=movimiento.id,
@@ -165,8 +240,67 @@ def movimiento_to_response(movimiento: Movimiento, user: Usuario) -> MovimientoR
         monto=format_decimal(movimiento.monto),
         tipo=movimiento.tipo,
         moneda=movimiento.moneda,
-        subtotal=format_decimal(movimiento.subtotal),
+        subtotal=(
+            format_decimal(movimiento.subtotal) if movimiento.subtotal is not None else None
+        ),
         fecha=fecha,
         editable=is_editable(movimiento, user),
         caja=CajaResponse.model_validate(movimiento.caja),
+        instrumento=movimiento.instrumento,
+        estado=movimiento.estado_cheque,
+        fecha_carga=fecha_carga,
+        fecha_liquidacion=movimiento.fecha_liquidacion,
+        fecha_liquidado=(
+            _to_ar(movimiento.fecha_liquidado)
+            if movimiento.fecha_liquidado is not None
+            else None
+        ),
+        liquidable=movimiento.estado_cheque == "pendiente" and user.rol == "secretaria",
     )
+
+
+class SaldoFuturoDetalle(BaseModel):
+    """A pending cheque inside a saldo-a-futuro row (what was entered)."""
+
+    descripcion: str
+    instrumento: Literal["cheque", "echeque"]
+    tipo: Literal["entrada", "salida"]
+    monto: str
+
+
+class SaldoFuturoFila(BaseModel):
+    fecha_liquidacion: date
+    vencido: bool
+    cheques: int
+    efecto_neto: str
+    saldo_proyectado: str
+    detalle: list[SaldoFuturoDetalle]
+
+
+class SaldoFuturoMoneda(BaseModel):
+    moneda: Moneda
+    saldo_actual: str
+    filas: list[SaldoFuturoFila]
+
+
+class SaldoFuturoResponse(BaseModel):
+    caja: CajaResponse
+    fecha_calculo: date
+    monedas: list[SaldoFuturoMoneda]
+
+
+class SaldoProyectadoMoneda(BaseModel):
+    """Valor de caja total on a chosen date, for one moneda."""
+
+    moneda: Moneda
+    saldo_actual: str
+    efecto_cheques: str
+    saldo_proyectado: str
+    cheques: int
+
+
+class SaldoProyectadoResponse(BaseModel):
+    caja: CajaResponse
+    # None = no date chosen: every pending cheque is included.
+    fecha: date | None
+    monedas: list[SaldoProyectadoMoneda]

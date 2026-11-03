@@ -899,3 +899,84 @@ async def test_post_par_con_fecha_manual_ambos_movimientos_tienen_misma_fecha(
     assert fecha_complementario == "2026-09-01T09:00:00-03:00", (
         f"Complementario fecha esperado '2026-09-01T09:00:00-03:00', obtenido '{fecha_complementario}'"
     )
+
+
+# ---------------------------------------------------------------------------
+# T008 — feature 010: paridad del listado (impacta saldo + fecha efectiva)
+# ---------------------------------------------------------------------------
+
+from .cheque_helpers import insert_cheque  # noqa: E402
+
+
+async def _post(client, headers, caja_id, **extra):
+    payload = {"descripcion": "listado", "monto": "10.00", "tipo": "entrada", **extra}
+    response = await client.post(
+        f"/api/v1/cajas/{caja_id}/movimientos", json=payload, headers=headers
+    )
+    assert response.status_code == 201, response.text
+    return response.json()["movimiento"]
+
+
+@pytest.mark.asyncio
+async def test_list_excludes_pending_cheques(
+    client: AsyncClient, secretaria_headers: dict[str, str], fresh_caja: dict
+) -> None:
+    caja_id = fresh_caja["id"]
+    comun = await _post(client, secretaria_headers, caja_id)
+    cheque_id = insert_cheque(caja_id)
+
+    response = await client.get(f"/api/v1/cajas/{caja_id}/movimientos", headers=secretaria_headers)
+
+    body = response.json()
+    ids = [item["id"] for item in body["items"]]
+    assert ids == [comun["id"]]
+    assert cheque_id not in ids
+    assert body["total_items"] == 1
+
+
+@pytest.mark.asyncio
+async def test_list_orders_by_effective_date(
+    client: AsyncClient, secretaria_headers: dict[str, str], fresh_caja: dict
+) -> None:
+    """Un movimiento retroactivo cargado después queda DEBAJO del cargado hoy."""
+    caja_id = fresh_caja["id"]
+    hoy = await _post(client, secretaria_headers, caja_id)
+    retro = await _post(client, secretaria_headers, caja_id, fecha_manual="2026-01-10")
+
+    response = await client.get(f"/api/v1/cajas/{caja_id}/movimientos", headers=secretaria_headers)
+
+    ids = [item["id"] for item in response.json()["items"]]
+    assert ids == [hoy["id"], retro["id"]]
+
+
+@pytest.mark.asyncio
+async def test_list_date_filters_use_effective_date(
+    client: AsyncClient, secretaria_headers: dict[str, str], fresh_caja: dict
+) -> None:
+    caja_id = fresh_caja["id"]
+    await _post(client, secretaria_headers, caja_id)
+    retro = await _post(client, secretaria_headers, caja_id, fecha_manual="2026-01-10")
+
+    response = await client.get(
+        f"/api/v1/cajas/{caja_id}/movimientos",
+        params={"fecha_desde": "2026-01-01", "fecha_hasta": "2026-01-31"},
+        headers=secretaria_headers,
+    )
+
+    assert [item["id"] for item in response.json()["items"]] == [retro["id"]]
+
+
+@pytest.mark.asyncio
+async def test_list_common_movements_keep_contract_shape(
+    client: AsyncClient, secretaria_headers: dict[str, str], fresh_caja: dict
+) -> None:
+    caja_id = fresh_caja["id"]
+    await _post(client, secretaria_headers, caja_id, monto="25.00")
+
+    response = await client.get(f"/api/v1/cajas/{caja_id}/movimientos", headers=secretaria_headers)
+
+    item = response.json()["items"][0]
+    assert item["subtotal"] == "25.00"
+    assert item["monto"] == "25.00"
+    assert item["moneda"] == "ARS"
+    assert item["editable"] is True

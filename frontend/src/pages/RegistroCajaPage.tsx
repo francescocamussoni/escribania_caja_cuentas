@@ -1,13 +1,17 @@
 import { FormEvent, useCallback, useEffect, useState } from "react";
 
 import CajaSelector from "../components/CajaSelector";
+import ChequesPendientesBlock from "../components/ChequesPendientesBlock";
 import MovimientoForm from "../components/MovimientoForm";
 import MovimientoTable from "../components/MovimientoTable";
 import Pagination from "../components/Pagination";
+import SaldoFuturoDesplegable from "../components/SaldoFuturoDesplegable";
+import ValorCajaTotal from "../components/ValorCajaTotal";
 import {
   apiGet,
   apiPost,
   deleteMovimiento,
+  liquidarCheque,
   updateMovimiento,
   type Caja,
   type CajaSaldo,
@@ -17,6 +21,7 @@ import {
   type MovimientoFiltros,
   type PaginatedMovimientos,
 } from "../services/api";
+import { mananaAr } from "../utils/fechas";
 
 export default function RegistroCajaPage() {
   const [cajas, setCajas] = useState<Caja[]>([]);
@@ -33,11 +38,18 @@ export default function RegistroCajaPage() {
   const [editDescripcion, setEditDescripcion] = useState("");
   const [editMonto, setEditMonto] = useState("");
   const [editTipo, setEditTipo] = useState<"entrada" | "salida">("entrada");
+  // 010: only for cheques/echeques (Cheque <-> Echeque; fecha only while pending)
+  const [editInstrumento, setEditInstrumento] = useState<"cheque" | "echeque">("cheque");
+  const [editFechaLiquidacion, setEditFechaLiquidacion] = useState("");
+  // 010: bump to reload the pending-cheques block after any change that affects it.
+  const [chequesRefreshKey, setChequesRefreshKey] = useState(0);
 
   // ── Filtros US3 ──────────────────────────────────────────────────────────
   const [filtroMoneda, setFiltroMoneda] = useState<"ARS" | "USD" | "">("");
   const [filtroFechaDesde, setFiltroFechaDesde] = useState("");
   const [filtroFechaHasta, setFiltroFechaHasta] = useState("");
+  // "Cheques pendientes" toggle: the listing shows pending cheques instead of the historial.
+  const [verPendientes, setVerPendientes] = useState(false);
 
   const buildFiltros = useCallback((): MovimientoFiltros => {
     const filtros: MovimientoFiltros = {};
@@ -49,7 +61,11 @@ export default function RegistroCajaPage() {
 
   const loadCajaData = useCallback(
     async (cajaId: number, currentPage: number, filtros?: MovimientoFiltros) => {
-      const params = new URLSearchParams({ page: String(currentPage) });
+      // Registro lists pending cheques mixed in with the movimientos (Consulta does not).
+      const params = new URLSearchParams({
+        page: String(currentPage),
+        incluir_pendientes: "true",
+      });
       if (filtros?.moneda) params.set("moneda", filtros.moneda);
       if (filtros?.fecha_desde) params.set("fecha_desde", filtros.fecha_desde);
       if (filtros?.fecha_hasta) params.set("fecha_hasta", filtros.fecha_hasta);
@@ -170,6 +186,51 @@ export default function RegistroCajaPage() {
       ),
     );
     await loadCajaData(selectedCajaId, 1);
+    setChequesRefreshKey((key) => key + 1);
+  }
+
+  async function handleLiquidarCheque(cheque: Movimiento) {
+    if (!selectedCajaId) {
+      return;
+    }
+    // Errors propagate to the block, which shows a generic message and keeps the cheque.
+    await liquidarCheque(selectedCajaId, cheque.id);
+    await loadCajaData(selectedCajaId, page);
+    setChequesRefreshKey((key) => key + 1);
+  }
+
+  async function handleDeleteCheque(cheque: Movimiento) {
+    if (!selectedCajaId) {
+      return;
+    }
+    // Errors propagate to the block, which shows a generic message and keeps the cheque.
+    await deleteMovimiento(selectedCajaId, cheque.id);
+    if (editingMovimiento?.id === cheque.id) {
+      handleCancelEdit();
+    }
+    await loadCajaData(selectedCajaId, page);
+    setChequesRefreshKey((key) => key + 1);
+  }
+
+  async function handleLiquidarDesdeLista(cheque: Movimiento) {
+    if (!selectedCajaId) {
+      return;
+    }
+    if (!window.confirm("¿Liquidar este cheque? Pasará a impactar el Valor de caja.")) {
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+    try {
+      await liquidarCheque(selectedCajaId, cheque.id);
+      await loadCajaData(selectedCajaId, page, buildFiltros());
+      setChequesRefreshKey((key) => key + 1);
+    } catch {
+      setError("No se pudo liquidar el cheque.");
+    } finally {
+      setLoading(false);
+    }
   }
 
   function handleStartEdit(movimiento: Movimiento) {
@@ -177,6 +238,10 @@ export default function RegistroCajaPage() {
     setEditDescripcion(movimiento.descripcion);
     setEditMonto(movimiento.monto);
     setEditTipo(movimiento.tipo);
+    if (movimiento.instrumento === "cheque" || movimiento.instrumento === "echeque") {
+      setEditInstrumento(movimiento.instrumento);
+    }
+    setEditFechaLiquidacion(movimiento.fecha_liquidacion ?? "");
     setError(null);
   }
 
@@ -185,6 +250,8 @@ export default function RegistroCajaPage() {
     setEditDescripcion("");
     setEditMonto("");
     setEditTipo("entrada");
+    setEditInstrumento("cheque");
+    setEditFechaLiquidacion("");
   }
 
   async function handleSaveEdit(event: FormEvent<HTMLFormElement>) {
@@ -196,14 +263,30 @@ export default function RegistroCajaPage() {
     setLoading(true);
     setError(null);
 
+    const esCheque = editingMovimiento.instrumento !== "ninguno";
+    const esPendiente = esCheque && editingMovimiento.estado === "pendiente";
+    // Only send the fecha if it changed: an overdue pending cheque must stay editable
+    // (the server requires a new fecha to be after today).
+    const fechaCambio =
+      esPendiente && editFechaLiquidacion !== (editingMovimiento.fecha_liquidacion ?? "");
+
+    if (fechaCambio && editFechaLiquidacion < mananaAr()) {
+      setError("La fecha de liquidación debe ser posterior a hoy.");
+      setLoading(false);
+      return;
+    }
+
     try {
       await updateMovimiento(selectedCajaId, editingMovimiento.id, {
         descripcion: editDescripcion,
         monto: editMonto,
         tipo: editTipo,
+        ...(esCheque ? { instrumento: editInstrumento } : {}),
+        ...(fechaCambio ? { fecha_liquidacion: editFechaLiquidacion } : {}),
       });
       handleCancelEdit();
       await loadCajaData(selectedCajaId, page);
+      setChequesRefreshKey((key) => key + 1);
     } catch {
       setError("No se pudo actualizar el movimiento.");
     } finally {
@@ -217,7 +300,9 @@ export default function RegistroCajaPage() {
     }
 
     const confirmed = window.confirm(
-      "¿Eliminar este movimiento? Se recalcularán los subtotales posteriores.",
+      movimiento.estado === "pendiente"
+        ? "¿Eliminar este cheque pendiente? No afecta el Valor de caja."
+        : "¿Eliminar este movimiento? Se recalcularán los subtotales posteriores.",
     );
     if (!confirmed) {
       return;
@@ -232,6 +317,7 @@ export default function RegistroCajaPage() {
         handleCancelEdit();
       }
       await loadCajaData(selectedCajaId, page);
+      setChequesRefreshKey((key) => key + 1);
     } catch {
       setError("No se pudo eliminar el movimiento.");
     } finally {
@@ -261,21 +347,31 @@ export default function RegistroCajaPage() {
       </div>
 
       <section className="saldo-panel page-block" data-block="saldo" aria-live="polite">
-        <h2>Valor de caja</h2>
-        {saldo ? (
-          <div className="saldo-dual">
-            <p className="saldo-valor">
-              <span className="saldo-moneda-label">ARS</span>
-              {` $ ${saldo.saldo_ars}`}
-            </p>
-            <p className="saldo-valor">
-              <span className="saldo-moneda-label">USD</span>
-              {` $ ${saldo.saldo_usd}`}
-            </p>
+        <div className="saldo-panel__row">
+          <div className="saldo-panel__actual">
+            <h2>Valor de caja</h2>
+            {saldo ? (
+              <div className="saldo-dual">
+                <p className="saldo-valor">
+                  <span className="saldo-moneda-label">ARS</span>
+                  {` $ ${saldo.saldo_ars}`}
+                </p>
+                <p className="saldo-valor">
+                  <span className="saldo-moneda-label">USD</span>
+                  {` $ ${saldo.saldo_usd}`}
+                </p>
+              </div>
+            ) : (
+              <p className="saldo-valor">{loading ? "Cargando…" : "—"}</p>
+            )}
           </div>
-        ) : (
-          <p className="saldo-valor">{loading ? "Cargando…" : "—"}</p>
-        )}
+          <ValorCajaTotal
+            cajaId={selectedCajaId}
+            fecha={filtroFechaHasta}
+            refreshKey={chequesRefreshKey}
+          />
+        </div>
+        <SaldoFuturoDesplegable cajaId={selectedCajaId} refreshKey={chequesRefreshKey} />
       </section>
 
       <div className="page-block" data-block="formulario">
@@ -330,6 +426,43 @@ export default function RegistroCajaPage() {
                 <option value="salida">Salida</option>
               </select>
             </label>
+
+            {editingMovimiento.instrumento !== "ninguno" ? (
+              <label className="field">
+                <span>Instrumento</span>
+                <select
+                  name="edit-instrumento"
+                  value={editInstrumento}
+                  disabled={loading}
+                  onChange={(event) =>
+                    setEditInstrumento(event.target.value as "cheque" | "echeque")
+                  }
+                >
+                  <option value="cheque">Cheque</option>
+                  <option value="echeque">Echeque</option>
+                </select>
+              </label>
+            ) : null}
+
+            {editingMovimiento.estado === "pendiente" ? (
+              <label className="field">
+                <span>Fecha de liquidación</span>
+                <input
+                  name="edit-fecha-liquidacion"
+                  type="date"
+                  value={editFechaLiquidacion}
+                  min={
+                    editingMovimiento.fecha_liquidacion &&
+                    editingMovimiento.fecha_liquidacion < mananaAr()
+                      ? editingMovimiento.fecha_liquidacion
+                      : mananaAr()
+                  }
+                  disabled={loading}
+                  onChange={(event) => setEditFechaLiquidacion(event.target.value)}
+                  required
+                />
+              </label>
+            ) : null}
 
             <div className="movimiento-edit-actions">
               <button
@@ -413,24 +546,52 @@ export default function RegistroCajaPage() {
             }}
           />
         </label>
+
+        <button
+          type="button"
+          className={`button filtro-pendientes ${
+            verPendientes ? "button--primary" : "button--secondary"
+          }`}
+          aria-pressed={verPendientes}
+          onClick={() => setVerPendientes((current) => !current)}
+        >
+          Cheques pendientes
+        </button>
       </div>
 
-      <div className="page-block" data-block="historial">
-        <MovimientoTable
-          movimientos={movimientos}
-          onEdit={handleStartEdit}
-          onDelete={handleDelete}
-        />
-      </div>
+      {verPendientes ? (
+        <div className="page-block" data-block="cheques-pendientes">
+          <ChequesPendientesBlock
+            cajaId={selectedCajaId}
+            refreshKey={chequesRefreshKey}
+            filtros={buildFiltros()}
+            showTitle={false}
+            onLiquidar={handleLiquidarCheque}
+            onEdit={handleStartEdit}
+            onDelete={handleDeleteCheque}
+          />
+        </div>
+      ) : (
+        <>
+          <div className="page-block" data-block="historial">
+            <MovimientoTable
+              movimientos={movimientos}
+              onEdit={handleStartEdit}
+              onDelete={handleDelete}
+              onLiquidar={handleLiquidarDesdeLista}
+            />
+          </div>
 
-      <div className="page-block" data-block="paginacion">
-        <Pagination
-          page={page}
-          totalPages={totalPages}
-          onPageChange={handlePageChange}
-          disabled={loading}
-        />
-      </div>
+          <div className="page-block" data-block="paginacion">
+            <Pagination
+              page={page}
+              totalPages={totalPages}
+              onPageChange={handlePageChange}
+              disabled={loading}
+            />
+          </div>
+        </>
+      )}
     </div>
   );
 }
