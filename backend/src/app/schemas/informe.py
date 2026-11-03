@@ -19,7 +19,7 @@ class InformePdfRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     tipo: InformeTipo
-    caja_id: int = Field(ge=1, le=15)
+    caja_id: int = Field(ge=1)
     modo: InformeModo
     hasta_hoy: bool = False
     mes: int | None = Field(default=None, ge=1, le=12)

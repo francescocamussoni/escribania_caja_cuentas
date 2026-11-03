@@ -177,8 +177,7 @@ from .cheque_helpers import insert_cheque  # noqa: E402
 
 PDF_URL = "/api/v1/informes/pdf"
 
-# `InformePdfRequest.caja_id` only accepts the 15 seeded cajas (le=15), so these tests use
-# the last seeded caja and wipe its movements before and after each test.
+# These tests use the last seeded caja and wipe its movements before and after each test.
 INFORME_CAJA_ID = 15
 
 
@@ -402,3 +401,16 @@ async def test_plazo_fijo_informe_is_unchanged(
     assert response.status_code == 200
     assert response.content.startswith(b"%PDF")
     assert pdf_text == []  # the CAJA renderer was not used
+
+
+@pytest.mark.asyncio
+async def test_informe_pdf_works_for_cajas_created_from_configuracion(
+    client: AsyncClient, secretaria_headers: dict, fresh_caja: dict
+) -> None:
+    """Regresión: una caja agregada en Configuración (id > 15) también se puede imprimir."""
+    caja_id = fresh_caja["id"]
+
+    response = await client.post(PDF_URL, json=_caja_body(caja_id), headers=secretaria_headers)
+
+    assert response.status_code == 200, response.text
+    assert response.content.startswith(b"%PDF")
