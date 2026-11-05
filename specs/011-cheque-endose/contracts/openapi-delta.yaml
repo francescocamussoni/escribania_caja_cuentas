@@ -1,0 +1,147 @@
+openapi: 3.0.0
+info:
+  title: Escribanía Cajas API — Delta 011-cheque-endose
+  description: |
+    Describe **únicamente los cambios** al contrato vigente (feature 010) introducidos por
+    la feature 011-cheque-endose.
+
+    Convenciones:
+    - Todas las rutas requieren `Authorization: Bearer <JWT>`.
+    - Endosar → rol `secretaria` (403 para `escribano`).
+    - Los errores no exponen trazas ni detalles internos.
+  version: "011"
+
+paths:
+  /api/v1/cajas/{caja_id}/movimientos/{movimiento_id}/endosar:
+    post:
+      summary: Endosar un cheque pendiente a otra caja (NUEVO)
+      description: |
+        En **una única operación atómica**:
+        1. Liquida el cheque pendiente en su caja de origen (`fecha_liquidado = ahora`;
+           entrada suma / salida resta), **sin** exigir que haya llegado su fecha de liquidación.
+        2. Crea en la caja destino un movimiento común de la **misma moneda y monto** con
+           **tipo inverso** (salida si el cheque era de entrada; entrada si era de salida) y
+           descripción generada por el servidor.
+
+        Si cualquiera de los dos pasos falla no se persiste ninguno.
+        El cheque endosado y el movimiento destino no pueden editarse ni eliminarse.
+      operationId: endosarCheque
+      tags: [movimientos]
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: caja_id, in: path, required: true, schema: { type: integer }, description: Caja de origen (la del cheque) }
+        - { name: movimiento_id, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EndosarChequeRequest'
+            example:
+              caja_destino_id: 4
+      responses:
+        '200':
+          description: Cheque endosado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EndoseResponse'
+        '401': { description: No autenticado }
+        '403': { description: Rol insuficiente (requiere secretaria) }
+        '404': { description: Caja de origen, cheque o caja destino inexistente (el cheque debe pertenecer a la caja de origen) }
+        '409': { description: El cheque ya fue liquidado o endosado }
+        '422': { description: Payload inválido, destino igual al origen o caja destino archivada }
+        '500': { description: Error genérico; el cheque permanece pendiente y no se crea ningún movimiento }
+
+  /api/v1/cajas/{caja_id}/movimientos/{movimiento_id}:
+    patch:
+      summary: Editar movimiento (CAMBIO)
+      description: |
+        **Cambio:** responde `409` si el registro es un cheque endosado o un movimiento generado
+        por un endose.
+      operationId: updateMovimiento
+      tags: [movimientos]
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: caja_id, in: path, required: true, schema: { type: integer } }
+        - { name: movimiento_id, in: path, required: true, schema: { type: integer } }
+      responses:
+        '409': { description: El registro proviene de un endose y no puede modificarse }
+    delete:
+      summary: Eliminar movimiento (CAMBIO)
+      description: |
+        **Cambio:** responde `409` si el registro es un cheque endosado o un movimiento generado
+        por un endose.
+      operationId: deleteMovimiento
+      tags: [movimientos]
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: caja_id, in: path, required: true, schema: { type: integer } }
+        - { name: movimiento_id, in: path, required: true, schema: { type: integer } }
+      responses:
+        '409': { description: El registro proviene de un endose y no puede eliminarse }
+
+components:
+  schemas:
+    EndosarChequeRequest:
+      type: object
+      additionalProperties: false
+      required: [caja_destino_id]
+      properties:
+        caja_destino_id:
+          type: integer
+          minimum: 1
+          description: Caja activa distinta de la caja del cheque.
+
+    EndoseOrigen:
+      type: object
+      required: [caja, cheque_id]
+      properties:
+        caja:
+          $ref: '#/components/schemas/CajaResponse'
+        cheque_id:
+          type: integer
+
+    EndoseResponse:
+      type: object
+      required: [cheque, movimiento_destino]
+      properties:
+        cheque:
+          $ref: '#/components/schemas/MovimientoResponse'
+        movimiento_destino:
+          $ref: '#/components/schemas/MovimientoResponse'
+
+    MovimientoResponse:
+      description: |
+        Campos **agregados** (aditivos) a `MovimientoResponse` de 010. `editable` cambia de
+        semántica: es `false` para cheques endosados y movimientos de endose.
+      type: object
+      properties:
+        editable:
+          type: boolean
+        endosable:
+          type: boolean
+          description: true si el cheque está pendiente y el usuario es secretaria.
+        endosado_a:
+          nullable: true
+          allOf:
+            - $ref: '#/components/schemas/CajaResponse'
+          description: Caja destino (solo en el cheque endosado).
+        endose_origen:
+          nullable: true
+          allOf:
+            - $ref: '#/components/schemas/EndoseOrigen'
+          description: Caja y cheque de origen (solo en el movimiento generado por el endose).
+
+    CajaResponse:
+      type: object
+      description: Sin cambios respecto al contrato vigente.
+
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT

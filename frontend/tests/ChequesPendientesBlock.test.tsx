@@ -13,9 +13,11 @@ import ChequesPendientesBlock from "../src/components/ChequesPendientesBlock";
 import type { Movimiento, PaginatedMovimientos } from "../src/services/api";
 
 const fetchChequesPendientes = vi.fn();
+const fetchCajas = vi.fn();
 
 vi.mock("../src/services/api", () => ({
   fetchChequesPendientes: (...args: unknown[]) => fetchChequesPendientes(...args),
+  fetchCajas: (...args: unknown[]) => fetchCajas(...args),
 }));
 
 const caja = { id: 1, nombre: "Bambina", slug: "bambina" };
@@ -37,6 +39,9 @@ function cheque(overrides: Partial<Movimiento> = {}): Movimiento {
     fecha_liquidacion: "2020-01-01",
     fecha_liquidado: null,
     liquidable: true,
+    endosable: false,
+    endosado_a: null,
+    endose_origen: null,
     ...overrides,
   };
 }
@@ -476,5 +481,125 @@ describe("ChequesPendientesBlock — Liquidar según la fecha de liquidación", 
     const boton = within(filaFuturo).getByRole("button", { name: /^liquidar$/i });
     expect(boton).toBeDisabled();
     expect(boton).toHaveAttribute("title", "Disponible desde el 01/01/2999");
+  });
+});
+
+describe("ChequesPendientesBlock — Endose (T014, feature 011)", () => {
+  beforeEach(() => {
+    fetchChequesPendientes.mockReset();
+    fetchCajas.mockReset();
+    fetchCajas.mockResolvedValue([
+      { id: 1, nombre: "Bambina", slug: "bambina" },
+      { id: 2, nombre: "Ebel", slug: "ebel" },
+    ]);
+  });
+
+  it("muestra Endose junto a Liquidar solo si el cheque es endosable y hay onEndosar", async () => {
+    fetchChequesPendientes.mockResolvedValue(
+      page([
+        cheque({ id: 1, descripcion: "Endosable", endosable: true }),
+        cheque({ id: 2, descripcion: "No endosable", endosable: false }),
+      ]),
+    );
+    const { rerender } = render(
+      <ChequesPendientesBlock
+        cajaId={1}
+        onLiquidar={vi.fn()}
+        onEndosar={vi.fn().mockResolvedValue(undefined)}
+      />,
+    );
+
+    const filas = await screen.findByText("Endosable").then(() => screen.getAllByRole("row").slice(1));
+    expect(within(filas[0]).getByRole("button", { name: /^endose$/i })).toBeInTheDocument();
+    expect(within(filas[0]).getByRole("button", { name: /^liquidar$/i })).toBeInTheDocument();
+    expect(within(filas[1]).queryByRole("button", { name: /^endose$/i })).not.toBeInTheDocument();
+
+    rerender(<ChequesPendientesBlock cajaId={1} onLiquidar={vi.fn()} />);
+    expect(screen.queryByRole("button", { name: /^endose$/i })).not.toBeInTheDocument();
+  });
+
+  it("con fecha futura Liquidar está deshabilitado y Endose habilitado; con fecha alcanzada ambos", async () => {
+    fetchChequesPendientes.mockResolvedValue(
+      page([
+        cheque({ id: 1, descripcion: "Futuro", fecha_liquidacion: "2999-01-01", endosable: true }),
+        cheque({ id: 2, descripcion: "Vencido", fecha_liquidacion: "2020-01-01", endosable: true }),
+      ]),
+    );
+    render(
+      <ChequesPendientesBlock
+        cajaId={1}
+        onLiquidar={vi.fn()}
+        onEndosar={vi.fn().mockResolvedValue(undefined)}
+      />,
+    );
+
+    const futuro = (await screen.findByText("Futuro")).closest("tr") as HTMLElement;
+    const vencido = screen.getByText("Vencido").closest("tr") as HTMLElement;
+    expect(within(futuro).getByRole("button", { name: /^liquidar$/i })).toBeDisabled();
+    expect(within(futuro).getByRole("button", { name: /^endose$/i })).toBeEnabled();
+    expect(within(vencido).getByRole("button", { name: /^liquidar$/i })).toBeEnabled();
+    expect(within(vencido).getByRole("button", { name: /^endose$/i })).toBeEnabled();
+  });
+
+  it("no ofrece Endose en solo lectura", async () => {
+    fetchChequesPendientes.mockResolvedValue(page([cheque({ endosable: true })]));
+    render(
+      <ChequesPendientesBlock
+        cajaId={1}
+        readOnly
+        onEndosar={vi.fn().mockResolvedValue(undefined)}
+      />,
+    );
+    await screen.findByText("Cheque Banco Nación 0001234");
+    expect(screen.queryByRole("button", { name: /^endose$/i })).not.toBeInTheDocument();
+  });
+
+  it("abre el diálogo, confirma con onEndosar y recarga el bloque", async () => {
+    fetchChequesPendientes.mockResolvedValue(page([cheque({ id: 7, endosable: true })]));
+    const onEndosar = vi.fn().mockResolvedValue(undefined);
+    render(<ChequesPendientesBlock cajaId={1} onEndosar={onEndosar} />);
+    await screen.findByText("Cheque Banco Nación 0001234");
+    const callsBefore = fetchChequesPendientes.mock.calls.length;
+
+    fireEvent.click(screen.getByRole("button", { name: /^endose$/i }));
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    fireEvent.click(await screen.findByRole("radio", { name: "Ebel" }));
+    fireEvent.click(screen.getByRole("button", { name: "Confirmar" }));
+
+    await waitFor(() =>
+      expect(onEndosar).toHaveBeenCalledWith(expect.objectContaining({ id: 7 }), 2),
+    );
+    await waitFor(() =>
+      expect(fetchChequesPendientes.mock.calls.length).toBeGreaterThan(callsBefore),
+    );
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+  });
+
+  it("si el endose falla muestra un error genérico y el cheque permanece", async () => {
+    fetchChequesPendientes.mockResolvedValue(page([cheque({ endosable: true })]));
+    const onEndosar = vi.fn().mockRejectedValue(new Error('{"detail":"interno"}'));
+    render(<ChequesPendientesBlock cajaId={1} onEndosar={onEndosar} />);
+    await screen.findByText("Cheque Banco Nación 0001234");
+
+    fireEvent.click(screen.getByRole("button", { name: /^endose$/i }));
+    fireEvent.click(await screen.findByRole("radio", { name: "Ebel" }));
+    fireEvent.click(screen.getByRole("button", { name: "Confirmar" }));
+
+    expect(await screen.findByText("No se pudo endosar el cheque.")).toBeInTheDocument();
+    expect(screen.queryByText(/interno/)).not.toBeInTheDocument();
+    expect(screen.getByText("Cheque Banco Nación 0001234")).toBeInTheDocument();
+  });
+
+  it("cancelar el diálogo no llama a onEndosar", async () => {
+    fetchChequesPendientes.mockResolvedValue(page([cheque({ endosable: true })]));
+    const onEndosar = vi.fn();
+    render(<ChequesPendientesBlock cajaId={1} onEndosar={onEndosar} />);
+    await screen.findByText("Cheque Banco Nación 0001234");
+
+    fireEvent.click(screen.getByRole("button", { name: /^endose$/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Cancelar" }));
+
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(onEndosar).not.toHaveBeenCalled();
   });
 });

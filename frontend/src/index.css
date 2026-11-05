@@ -1455,3 +1455,48 @@ select {
     border-top: 1px solid #e3e7ef;
   }
 }
+
+/* 011 — Endose de cheques: reutiliza el look de .complementario-dialog */
+.endose-dialog {
+  max-width: 26rem;
+  max-height: calc(100vh - 2rem);
+  overflow-y: auto;
+}
+
+.endose-dialog__list {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.endose-dialog__option {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  min-height: 2.75rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid rgba(22, 33, 62, 0.2);
+  border-radius: 0.5rem;
+  cursor: pointer;
+}
+
+.endose-dialog__option:has(input:checked) {
+  border-color: #16213e;
+  background: rgba(22, 33, 62, 0.06);
+}
+
+@media (max-width: 480px) {
+  .endose-dialog {
+    padding: 1rem;
+  }
+
+  .endose-dialog .complementario-dialog__actions {
+    flex-direction: column-reverse;
+  }
+}
+
+.movimiento-endose-marca {
+  display: block;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #5a6478;
+}

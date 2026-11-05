@@ -11,8 +11,10 @@ from sqlalchemy import (
     Numeric,
     SmallInteger,
     String,
+    Index,
     func,
     or_,
+    text,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -56,6 +58,25 @@ class Movimiento(Base):
             "(subtotal IS NOT NULL) = (instrumento = 'ninguno' OR fecha_liquidado IS NOT NULL)",
             name="ck_movimiento_subtotal_estado",
         ),
+        # Feature 011 (endose): a cheque can only be endorsed once liquidated; the movement it
+        # generates is a common movement that is never itself endorsed.
+        CheckConstraint(
+            "endosado_a_caja_id IS NULL "
+            "OR (instrumento <> 'ninguno' AND fecha_liquidado IS NOT NULL)",
+            name="ck_movimiento_endose_cheque",
+        ),
+        CheckConstraint(
+            "endose_cheque_id IS NULL "
+            "OR (instrumento = 'ninguno' AND endosado_a_caja_id IS NULL)",
+            name="ck_movimiento_endose_destino",
+        ),
+        # A cheque originates at most one endorsement movement.
+        Index(
+            "uq_movimiento_endose_cheque",
+            "endose_cheque_id",
+            unique=True,
+            postgresql_where=text("endose_cheque_id IS NOT NULL"),
+        ),
     )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
@@ -92,8 +113,29 @@ class Movimiento(Base):
     )
     updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     updated_by: Mapped[int | None] = mapped_column(ForeignKey("usuario.id"))
+    # Feature 011 (endose). On the CHEQUE: destination caja of the endorsement.
+    endosado_a_caja_id: Mapped[int | None] = mapped_column(
+        SmallInteger,
+        ForeignKey("caja.id", name="fk_movimiento_endosado_a_caja"),
+        nullable=True,
+    )
+    # On the DESTINATION movement: the cheque that originated it.
+    endose_cheque_id: Mapped[int | None] = mapped_column(
+        BigInteger,
+        ForeignKey("movimiento.id", name="fk_movimiento_endose_cheque"),
+        nullable=True,
+    )
 
-    caja: Mapped["Caja"] = relationship(back_populates="movimientos")
+    caja: Mapped["Caja"] = relationship(back_populates="movimientos", foreign_keys=[caja_id])
+    endosado_a_caja: Mapped["Caja | None"] = relationship(
+        foreign_keys=[endosado_a_caja_id],
+        lazy="selectin",
+    )
+    endose_cheque: Mapped["Movimiento | None"] = relationship(
+        foreign_keys=[endose_cheque_id],
+        remote_side=[id],
+        lazy="selectin",
+    )
 
     # ------------------------------------------------------------------
     # Derived properties (not persisted) — see specs/010-cheques-instrumento/data-model.md
@@ -112,6 +154,21 @@ class Movimiento(Base):
     @property
     def impacta_saldo(self) -> bool:
         return self.subtotal is not None
+
+    @property
+    def endosado(self) -> bool:
+        """True for a cheque that was endorsed to another caja (feature 011)."""
+        return self.endosado_a_caja_id is not None
+
+    @property
+    def es_endose_destino(self) -> bool:
+        """True for the movement generated in the destination caja by an endorsement."""
+        return self.endose_cheque_id is not None
+
+    @property
+    def bloqueado_por_endose(self) -> bool:
+        """Endorsed cheques and their destination movements are final (no edit/delete)."""
+        return self.endosado or self.es_endose_destino
 
     @property
     def fecha_carga(self) -> datetime:

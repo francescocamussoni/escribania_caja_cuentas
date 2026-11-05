@@ -1,8 +1,10 @@
 import { useEffect, useId, useState } from "react";
 
+import EndoseDialog from "../components/EndoseDialog";
 import Pagination from "../components/Pagination";
 import { useAuth } from "../hooks/useAuth";
 import {
+  endosarCheque,
   fetchCheques,
   liquidarCheque,
   type ChequeCategoria,
@@ -24,6 +26,7 @@ type ChequesListadoProps = {
   canAct: boolean;
   liquidandoId: number | null;
   onLiquidar: (cheque: Movimiento) => void;
+  onEndosar: (cheque: Movimiento) => void;
 };
 
 function ChequesListado({
@@ -35,6 +38,7 @@ function ChequesListado({
   canAct,
   liquidandoId,
   onLiquidar,
+  onEndosar,
 }: ChequesListadoProps) {
   const headingId = useId();
   const [items, setItems] = useState<Movimiento[]>([]);
@@ -155,6 +159,16 @@ function ChequesListado({
                         Liquidar
                       </button>
                     ) : null}
+                    {cheque.endosable ? (
+                      <button
+                        type="button"
+                        className="btn-table-action btn-table-action-edit"
+                        onClick={() => onEndosar(cheque)}
+                        disabled={liquidandoId !== null}
+                      >
+                        Endose
+                      </button>
+                    ) : null}
                   </div>
                 </td>
               ) : null}
@@ -179,6 +193,19 @@ export default function ChequesPage() {
   const [refreshKey, setRefreshKey] = useState(0);
   const [liquidandoId, setLiquidandoId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // 011: cheque whose Endose dialog is open (origin caja = cheque.caja).
+  const [endosando, setEndosando] = useState<Movimiento | null>(null);
+
+  async function handleEndosar(cajaDestinoId: number) {
+    if (!endosando) {
+      return;
+    }
+    // A rejection propagates to the dialog, which shows a generic error and stays open.
+    await endosarCheque(endosando.caja.id, endosando.id, cajaDestinoId);
+    setEndosando(null);
+    setError(null);
+    setRefreshKey((key) => key + 1);
+  }
 
   async function handleLiquidar(cheque: Movimiento) {
     if (liquidandoId !== null) {
@@ -224,6 +251,7 @@ export default function ChequesPage() {
         canAct={canAct}
         liquidandoId={liquidandoId}
         onLiquidar={(cheque) => void handleLiquidar(cheque)}
+        onEndosar={setEndosando}
       />
       <ChequesListado
         categoria="proximos"
@@ -234,7 +262,15 @@ export default function ChequesPage() {
         canAct={canAct}
         liquidandoId={liquidandoId}
         onLiquidar={(cheque) => void handleLiquidar(cheque)}
+        onEndosar={setEndosando}
       />
+      {canAct && endosando ? (
+        <EndoseDialog
+          cajaOrigenId={endosando.caja.id}
+          onConfirm={handleEndosar}
+          onCancel={() => setEndosando(null)}
+        />
+      ) : null}
     </div>
   );
 }

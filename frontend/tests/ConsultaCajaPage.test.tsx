@@ -710,6 +710,9 @@ describe("ConsultaCajaPage — filtros de listado (T028)", () => {
     fecha_liquidacion: "2026-11-15",
     fecha_liquidado: null,
     liquidable: false,
+    endosable: false,
+    endosado_a: null,
+    endose_origen: null,
   };
 
   it.each(["escribano", "secretaria"])(
@@ -822,6 +825,9 @@ describe("MovimientoTable — cheques (feature 010)", () => {
     fecha_liquidacion: null,
     fecha_liquidado: null,
     liquidable: false,
+    endosable: false,
+    endosado_a: null,
+    endose_origen: null,
   };
 
   it("tolera subtotal null sin romper ni mostrar 'null'", () => {

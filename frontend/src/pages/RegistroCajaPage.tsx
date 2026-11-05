@@ -1,6 +1,7 @@
 import { FormEvent, useCallback, useEffect, useState } from "react";
 
 import CajaSelector from "../components/CajaSelector";
+import EndoseDialog from "../components/EndoseDialog";
 import ChequesPendientesBlock from "../components/ChequesPendientesBlock";
 import MovimientoForm from "../components/MovimientoForm";
 import MovimientoTable from "../components/MovimientoTable";
@@ -11,6 +12,7 @@ import {
   apiGet,
   apiPost,
   deleteMovimiento,
+  endosarCheque,
   liquidarCheque,
   updateMovimiento,
   type Caja,
@@ -50,6 +52,7 @@ export default function RegistroCajaPage() {
   const [filtroFechaHasta, setFiltroFechaHasta] = useState("");
   // "Cheques pendientes" toggle: the listing shows pending cheques instead of the historial.
   const [verPendientes, setVerPendientes] = useState(false);
+  const [endosandoDesdeLista, setEndosandoDesdeLista] = useState<Movimiento | null>(null);
 
   const buildFiltros = useCallback((): MovimientoFiltros => {
     const filtros: MovimientoFiltros = {};
@@ -196,6 +199,19 @@ export default function RegistroCajaPage() {
     // Errors propagate to the block, which shows a generic message and keeps the cheque.
     await liquidarCheque(selectedCajaId, cheque.id);
     await loadCajaData(selectedCajaId, page);
+    setChequesRefreshKey((key) => key + 1);
+  }
+
+  async function handleEndosarCheque(cheque: Movimiento, cajaDestinoId: number) {
+    if (!selectedCajaId) {
+      return;
+    }
+    // Errors propagate to the dialog, which shows a generic message and keeps the cheque.
+    await endosarCheque(selectedCajaId, cheque.id, cajaDestinoId);
+    if (editingMovimiento?.id === cheque.id) {
+      handleCancelEdit();
+    }
+    await loadCajaData(selectedCajaId, page, buildFiltros());
     setChequesRefreshKey((key) => key + 1);
   }
 
@@ -567,6 +583,7 @@ export default function RegistroCajaPage() {
             filtros={buildFiltros()}
             showTitle={false}
             onLiquidar={handleLiquidarCheque}
+            onEndosar={handleEndosarCheque}
             onEdit={handleStartEdit}
             onDelete={handleDeleteCheque}
           />
@@ -579,8 +596,20 @@ export default function RegistroCajaPage() {
               onEdit={handleStartEdit}
               onDelete={handleDelete}
               onLiquidar={handleLiquidarDesdeLista}
+              onEndosar={setEndosandoDesdeLista}
             />
           </div>
+
+          {endosandoDesdeLista && selectedCajaId ? (
+            <EndoseDialog
+              cajaOrigenId={selectedCajaId}
+              onConfirm={async (cajaDestinoId) => {
+                await handleEndosarCheque(endosandoDesdeLista, cajaDestinoId);
+                setEndosandoDesdeLista(null);
+              }}
+              onCancel={() => setEndosandoDesdeLista(null)}
+            />
+          ) : null}
 
           <div className="page-block" data-block="paginacion">
             <Pagination

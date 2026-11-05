@@ -27,6 +27,9 @@ const comun: Movimiento = {
   fecha_liquidacion: null,
   fecha_liquidado: null,
   liquidable: false,
+  endosable: false,
+  endosado_a: null,
+  endose_origen: null,
 };
 
 const pendiente: Movimiento = {
@@ -38,6 +41,9 @@ const pendiente: Movimiento = {
   estado: "pendiente",
   fecha_liquidacion: "2020-01-01",
   liquidable: true,
+  endosable: false,
+  endosado_a: null,
+  endose_origen: null,
 };
 
 // Fecha de liquidación todavía no alcanzada.
@@ -51,6 +57,9 @@ const liquidado: Movimiento = {
   estado: "liquidado",
   fecha_liquidado: "2026-10-21T10:00:00-03:00",
   liquidable: false,
+  endosable: false,
+  endosado_a: null,
+  endose_origen: null,
 };
 
 function row(text: string): HTMLElement {

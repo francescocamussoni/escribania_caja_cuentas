@@ -7,6 +7,8 @@ type MovimientoTableProps = {
   onDelete?: (movimiento: Movimiento) => void;
   /** Liquidate a pending cheque listed among the movimientos (Registro only). */
   onLiquidar?: (movimiento: Movimiento) => void;
+  /** Endorse a pending cheque listed among the movimientos (Registro only). */
+  onEndosar?: (movimiento: Movimiento) => void;
 };
 
 function formatFecha(fecha: string): string {
@@ -28,8 +30,9 @@ export default function MovimientoTable({
   onEdit,
   onDelete,
   onLiquidar,
+  onEndosar,
 }: MovimientoTableProps) {
-  const showActions = Boolean(onEdit || onDelete || onLiquidar);
+  const showActions = Boolean(onEdit || onDelete || onLiquidar || onEndosar);
   const showValorTotal = movimientos.some((m) => m.valor_total != null);
 
   return (
@@ -56,7 +59,19 @@ export default function MovimientoTable({
         ) : null}
         {movimientos.map((movimiento) => (
           <tr key={movimiento.id}>
-            <td data-label="Descripción">{movimiento.descripcion}</td>
+            <td data-label="Descripción">
+              {movimiento.descripcion}
+              {movimiento.endosado_a ? (
+                <span className="movimiento-endose-marca">
+                  Endosado → {movimiento.endosado_a.nombre}
+                </span>
+              ) : null}
+              {movimiento.endose_origen ? (
+                <span className="movimiento-endose-marca">
+                  Endose desde {movimiento.endose_origen.caja.nombre}
+                </span>
+              ) : null}
+            </td>
             <td
               data-label="Monto"
               className={
@@ -110,6 +125,15 @@ export default function MovimientoTable({
                       }
                     >
                       Liquidar
+                    </button>
+                  ) : null}
+                  {movimiento.endosable && onEndosar ? (
+                    <button
+                      type="button"
+                      className="btn-table-action btn-table-action-edit"
+                      onClick={() => onEndosar(movimiento)}
+                    >
+                      Endose
                     </button>
                   ) : null}
                   {movimiento.editable && onEdit ? (

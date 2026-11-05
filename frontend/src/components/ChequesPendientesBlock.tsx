@@ -6,6 +6,7 @@ import {
   type MovimientoFiltros,
 } from "../services/api";
 import { formatFechaCarga, formatFechaIso, llegoFechaLiquidacion } from "../utils/fechas";
+import EndoseDialog from "./EndoseDialog";
 import Pagination from "./Pagination";
 
 type ChequesPendientesBlockProps = {
@@ -19,6 +20,11 @@ type ChequesPendientesBlockProps = {
    * block offers no Liquidar action.
    */
   onLiquidar?: (cheque: Movimiento) => Promise<void>;
+  /**
+   * Endorse a pending cheque to another caja (Registro only, secretaria). Must reject on
+   * failure. When absent the block offers no Endose action.
+   */
+  onEndosar?: (cheque: Movimiento, cajaDestinoId: number) => Promise<void>;
   /** Open the edit panel for a pending cheque (Registro only). */
   onEdit?: (cheque: Movimiento) => void;
   /** Delete a pending cheque (Registro only). Must reject on failure. */
@@ -39,6 +45,7 @@ export default function ChequesPendientesBlock({
   refreshKey = 0,
   readOnly = false,
   onLiquidar,
+  onEndosar,
   onEdit,
   onDelete,
   filtros,
@@ -50,6 +57,8 @@ export default function ChequesPendientesBlock({
   const [error, setError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [liquidandoId, setLiquidandoId] = useState<number | null>(null);
+  // 011: cheque whose Endose dialog is open.
+  const [endosando, setEndosando] = useState<Movimiento | null>(null);
   // Reload trigger owned by the block itself (after a successful liquidation).
   const [localRefresh, setLocalRefresh] = useState(0);
   const moneda = filtros?.moneda || undefined;
@@ -112,7 +121,10 @@ export default function ChequesPendientesBlock({
 
   const canAct =
     !readOnly &&
-    (onLiquidar !== undefined || onEdit !== undefined || onDelete !== undefined);
+    (onLiquidar !== undefined ||
+      onEndosar !== undefined ||
+      onEdit !== undefined ||
+      onDelete !== undefined);
 
   async function runAction(
     cheque: Movimiento,
@@ -149,6 +161,17 @@ export default function ChequesPendientesBlock({
       "No se pudo liquidar el cheque.",
       onLiquidar,
     );
+  }
+
+  async function handleConfirmEndose(cajaDestinoId: number) {
+    if (!endosando || !onEndosar) {
+      return;
+    }
+    // A rejection propagates to the dialog, which shows a generic error and stays open.
+    await onEndosar(endosando, cajaDestinoId);
+    setEndosando(null);
+    setActionError(null);
+    setLocalRefresh((key) => key + 1);
   }
 
   function handleDelete(cheque: Movimiento) {
@@ -234,6 +257,16 @@ export default function ChequesPendientesBlock({
                         Liquidar
                       </button>
                     ) : null}
+                    {onEndosar && cheque.endosable ? (
+                      <button
+                        type="button"
+                        className="btn-table-action btn-table-action-edit"
+                        onClick={() => setEndosando(cheque)}
+                        disabled={liquidandoId !== null}
+                      >
+                        Endose
+                      </button>
+                    ) : null}
                     {onEdit && cheque.editable ? (
                       <button
                         type="button"
@@ -278,6 +311,13 @@ export default function ChequesPendientesBlock({
     >
       {showTitle ? <h2>Cheques pendientes</h2> : null}
       {content}
+      {endosando && onEndosar && !readOnly ? (
+        <EndoseDialog
+          cajaOrigenId={endosando.caja.id}
+          onConfirm={handleConfirmEndose}
+          onCancel={() => setEndosando(null)}
+        />
+      ) : null}
     </section>
   );
 }

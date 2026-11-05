@@ -245,3 +245,39 @@ async def test_cannot_liquidate_before_the_fecha_de_liquidacion(
     assert on_time.status_code == 200
     saldo = await client.get(f"/api/v1/cajas/{caja_id}/saldo", headers=secretaria_headers)
     assert saldo.json()["saldo_ars"] == "20.00"
+
+
+@pytest.mark.asyncio
+async def test_liquidar_never_creates_movements_in_other_cajas(
+    client: AsyncClient, secretaria_headers: dict, fresh_caja: dict
+) -> None:
+    """Feature 011 regression: a plain liquidation only affects the cheque's own caja."""
+    from sqlalchemy import func, select
+
+    from app.db.session import SessionLocal
+    from app.models.movimiento import Movimiento
+
+    caja_id = fresh_caja["id"]
+    cheque_id = insert_cheque(caja_id, monto="45.00", fecha_liquidacion=date(2020, 1, 1))
+
+    with SessionLocal() as session:
+        before = session.scalar(select(func.count()).select_from(Movimiento))
+
+    response = await _liquidar(client, secretaria_headers, caja_id, cheque_id)
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["endosado_a"] is None
+    assert body["endose_origen"] is None
+    assert body["editable"] is True  # a plain liquidated cheque keeps today's edit rules
+    with SessionLocal() as session:
+        after = session.scalar(select(func.count()).select_from(Movimiento))
+        assert after == before  # liquidating creates no new movement anywhere
+        assert (
+            session.scalar(
+                select(func.count())
+                .select_from(Movimiento)
+                .where(Movimiento.endose_cheque_id == cheque_id)
+            )
+            == 0
+        )

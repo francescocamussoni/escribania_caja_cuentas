@@ -9,6 +9,8 @@ const apiGet = vi.fn();
 const apiPost = vi.fn();
 const fetchChequesPendientes = vi.fn();
 const liquidarCheque = vi.fn();
+const endosarCheque = vi.fn();
+const fetchCajas = vi.fn();
 const fetchSaldoFuturo = vi.fn();
 const fetchSaldoProyectado = vi.fn();
 const updateMovimiento = vi.fn();
@@ -21,6 +23,8 @@ vi.mock("../src/services/api", () => ({
   apiPost: (...args: unknown[]) => apiPost(...args),
   fetchChequesPendientes: (...args: unknown[]) => fetchChequesPendientes(...args),
   liquidarCheque: (...args: unknown[]) => liquidarCheque(...args),
+  endosarCheque: (...args: unknown[]) => endosarCheque(...args),
+  fetchCajas: (...args: unknown[]) => fetchCajas(...args),
   fetchSaldoFuturo: (...args: unknown[]) => fetchSaldoFuturo(...args),
   fetchSaldoProyectado: (...args: unknown[]) => fetchSaldoProyectado(...args),
   updateMovimiento: (...args: unknown[]) => updateMovimiento(...args),
@@ -47,6 +51,12 @@ describe("RegistroCajaPage", () => {
     fetchChequesPendientes.mockReset();
     fetchChequesPendientes.mockResolvedValue(EMPTY_PAGE);
     liquidarCheque.mockReset();
+    endosarCheque.mockReset();
+    fetchCajas.mockReset();
+    fetchCajas.mockResolvedValue([
+      { id: 1, nombre: "Bambina", slug: "bambina" },
+      { id: 2, nombre: "Ebel", slug: "ebel" },
+    ]);
     updateMovimiento.mockReset();
     deleteMovimiento.mockReset();
     fetchSaldoFuturo.mockReset();
@@ -466,6 +476,9 @@ describe("RegistroCajaPage", () => {
     fecha_liquidacion: "2020-01-01",
     fecha_liquidado: null,
     liquidable: true,
+    endosable: false,
+    endosado_a: null,
+    endose_origen: null,
   };
 
   // El listado de cheques pendientes se ve con el botón "Cheques pendientes" junto a los filtros.
@@ -687,6 +700,9 @@ describe("RegistroCajaPage", () => {
       subtotal: "500.00",
       estado: "liquidado",
       liquidable: false,
+      endosable: false,
+      endosado_a: null,
+      endose_origen: null,
     });
 
     render(
@@ -951,6 +967,9 @@ describe("RegistroCajaPage", () => {
       subtotal: "500.00",
       estado: "liquidado" as const,
       liquidable: false,
+      endosable: false,
+      endosado_a: null,
+      endose_origen: null,
       fecha_liquidado: "2026-10-21T10:00:00-03:00",
     };
     apiGet.mockImplementation((path: string) => {
@@ -1022,6 +1041,9 @@ describe("RegistroCajaPage", () => {
               fecha_liquidacion: null,
               fecha_liquidado: null,
               liquidable: false,
+              endosable: false,
+              endosado_a: null,
+              endose_origen: null,
             },
           ],
           page: 1,
@@ -1074,6 +1096,40 @@ describe("RegistroCajaPage", () => {
     );
     await waitFor(() => expect(fetchSaldoFuturo.mock.calls.length).toBeGreaterThan(futuroBefore));
     confirmSpy.mockRestore();
+  });
+
+  // -----------------------------------------------------------------------
+  // T015 — feature 011: endosar un cheque desde Registro
+  // -----------------------------------------------------------------------
+
+  it("T015: endosar refresca Valor de caja, historial, pendientes y Saldo a futuro", async () => {
+    await renderWithPendingCheque({ ...chequePendiente, endosable: true });
+    fireEvent.click(screen.getByText("Saldo a futuro"));
+    await waitFor(() => expect(fetchSaldoFuturo).toHaveBeenCalled());
+    endosarCheque.mockResolvedValue({
+      cheque: { ...chequePendiente, estado: "liquidado" },
+      movimiento_destino: { ...chequePendiente, id: 900 },
+    });
+    const saldoCalls = () =>
+      apiGet.mock.calls.filter((c) => c[0] === "/api/v1/cajas/1/saldo").length;
+    const historialCalls = () =>
+      apiGet.mock.calls.filter((c) => String(c[0]).startsWith("/api/v1/cajas/1/movimientos")).length;
+    const saldoBefore = saldoCalls();
+    const historialBefore = historialCalls();
+    const pendientesBefore = fetchChequesPendientes.mock.calls.length;
+    const futuroBefore = fetchSaldoFuturo.mock.calls.length;
+
+    fireEvent.click(screen.getByRole("button", { name: /^endose$/i }));
+    fireEvent.click(await screen.findByRole("radio", { name: "Ebel" }));
+    fireEvent.click(screen.getByRole("button", { name: "Confirmar" }));
+
+    await waitFor(() => expect(endosarCheque).toHaveBeenCalledWith(1, 501, 2));
+    await waitFor(() => expect(saldoCalls()).toBeGreaterThan(saldoBefore));
+    expect(historialCalls()).toBeGreaterThan(historialBefore);
+    await waitFor(() =>
+      expect(fetchChequesPendientes.mock.calls.length).toBeGreaterThan(pendientesBefore),
+    );
+    await waitFor(() => expect(fetchSaldoFuturo.mock.calls.length).toBeGreaterThan(futuroBefore));
   });
 });
 

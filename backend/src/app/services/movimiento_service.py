@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 from datetime import date, datetime, timezone
 from decimal import Decimal
 
@@ -28,7 +29,34 @@ class ChequeAunNoLiquidableError(Exception):
 
 
 class ChequeYaLiquidadoError(Exception):
-    """Raised when trying to liquidate a cheque that is already liquidated."""
+    """Raised when trying to liquidate or endorse a cheque that is no longer pending.
+
+    A cheque that was already endorsed is also liquidated, so this single error covers
+    "already liquidated" and "already endorsed".
+    """
+
+
+class CajaDestinoNotFoundError(Exception):
+    """The destination caja of an endorsement does not exist."""
+
+
+class EndoseDestinoInvalidoError(ValueError):
+    """The destination caja of an endorsement is the origin caja or is archived."""
+
+
+class MovimientoEndosadoError(Exception):
+    """Endorsed cheques and the movements they generate are final: no edit / delete."""
+
+
+ENDOSE_DESCRIPCION_MAX = 500
+
+
+@dataclass(frozen=True)
+class EndoseResult:
+    """Both records touched by an endorsement."""
+
+    cheque: Movimiento
+    movimiento_destino: Movimiento
 
 
 def compute_subtotal(previous: Decimal, monto: Decimal, tipo: str) -> Decimal:
@@ -54,6 +82,7 @@ class MovimientoService:
         fecha_override: datetime | None = None,  # T028: fecha manual a 09:00 AR (US3)
         instrumento: str = INSTRUMENTO_NINGUNO,
         fecha_liquidacion: date | None = None,
+        endose_cheque_id: int | None = None,  # feature 011: set only by `endosar_cheque`
         user: Usuario,
     ) -> Movimiento:
         cleaned_description = descripcion.strip()
@@ -105,6 +134,7 @@ class MovimientoService:
             subtotal=subtotal,
             created_by=user.id,
             fecha_override=fecha_override,  # T028: persisted; None keeps original behavior
+            endose_cheque_id=endose_cheque_id,
         )
         self.db.add(movimiento)
         self.db.flush()
@@ -245,6 +275,87 @@ class MovimientoService:
         self.db.refresh(cheque)
         return cheque
 
+    def endosar_cheque(
+        self,
+        *,
+        caja_id: int,
+        movimiento_id: int,
+        caja_destino_id: int,
+        user: Usuario,
+    ) -> EndoseResult:
+        """Endorse a pending cheque to another caja (feature 011), atomically.
+
+        1. The cheque is liquidated in its own caja (entrada adds / salida subtracts), with
+           no check on its fecha de liquidación: an endorsement may happen at any time.
+        2. A common movement with the INVERSE tipo, same moneda and monto is created in the
+           destination caja (its description is generated here, never taken from the client).
+
+        Lock order: both cajas by ascending id -> cheque row -> stream rows. The fixed
+        caja order prevents deadlocks between crossed endorsements (A->B and B->A), and
+        the cheque row lock makes a double submit find the cheque already liquidated.
+        Nothing is committed here: on any failure the caller rolls back and the cheque
+        stays pending with no movement in the destination caja.
+        """
+        if caja_destino_id == caja_id:
+            raise EndoseDestinoInvalidoError("La caja destino debe ser distinta de la caja origen")
+
+        cajas = {
+            caja.id: caja
+            for caja in self.db.scalars(
+                select(Caja)
+                .where(Caja.id.in_([caja_id, caja_destino_id]))
+                .order_by(Caja.id.asc())
+                .with_for_update(key_share=True)
+            ).all()
+        }
+        caja_origen = cajas.get(caja_id)
+        caja_destino = cajas.get(caja_destino_id)
+        if caja_destino is None:
+            raise CajaDestinoNotFoundError()
+        if caja_destino.estado != "activa":
+            raise EndoseDestinoInvalidoError("La caja destino debe estar activa")
+
+        cheque = self.db.scalar(
+            select(Movimiento)
+            .where(
+                Movimiento.id == movimiento_id,
+                Movimiento.caja_id == caja_id,
+                Movimiento.instrumento.in_(INSTRUMENTOS_CHEQUE),
+            )
+            .with_for_update()
+        )
+        if caja_origen is None or cheque is None:
+            raise MovimientoNotFoundError()
+        if cheque.fecha_liquidado is not None:
+            raise ChequeYaLiquidadoError()
+
+        now = datetime.now(timezone.utc)
+        cheque.fecha_liquidado = now
+        # Provisional subtotal required by ck_movimiento_subtotal_estado; replayed below.
+        cheque.subtotal = compute_subtotal(Decimal("0"), cheque.monto, cheque.tipo)
+        cheque.endosado_a_caja_id = caja_destino_id
+        cheque.updated_at = now
+        cheque.updated_by = user.id
+        self.db.flush()
+
+        movimiento_destino = self.create_movimiento(
+            caja_id=caja_destino_id,
+            descripcion=f"Endose cheque: {cheque.descripcion} (Caja {caja_origen.nombre})"[
+                :ENDOSE_DESCRIPCION_MAX
+            ],
+            monto=cheque.monto,
+            tipo="salida" if cheque.tipo == "entrada" else "entrada",
+            moneda=cheque.moneda,
+            endose_cheque_id=cheque.id,
+            user=user,
+        )
+
+        self.recalculate_subtotals(caja_id, moneda=cheque.moneda)
+        self.recalculate_subtotals(caja_destino_id, moneda=cheque.moneda)
+        self.db.refresh(cheque)
+        self.db.refresh(movimiento_destino)
+        return EndoseResult(cheque=cheque, movimiento_destino=movimiento_destino)
+
     def recalculate_subtotals(self, caja_id: int, moneda: str = "ARS") -> None:
         """Recalculate subtotals for a single currency stream (caja_id, moneda).
 
@@ -295,6 +406,8 @@ class MovimientoService:
         )
         if movimiento is None:
             raise MovimientoNotFoundError()
+        if movimiento.bloqueado_por_endose:
+            raise MovimientoEndosadoError()
 
         es_cheque = movimiento.instrumento in INSTRUMENTOS_CHEQUE
         pendiente = es_cheque and movimiento.fecha_liquidado is None
@@ -378,6 +491,8 @@ class MovimientoService:
         )
         if movimiento is None:
             raise MovimientoNotFoundError()
+        if movimiento.bloqueado_por_endose:
+            raise MovimientoEndosadoError()
 
         # Only rows that impact the balance require replaying their stream.
         impactaba_saldo = movimiento.subtotal is not None

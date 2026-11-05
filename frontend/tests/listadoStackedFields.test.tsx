@@ -58,6 +58,9 @@ const movimiento: Movimiento = {
   fecha_liquidacion: null,
   fecha_liquidado: null,
   liquidable: false,
+  endosable: false,
+  endosado_a: null,
+  endose_origen: null,
 };
 
 const plazoFijo: PlazoFijo = {
@@ -235,6 +238,9 @@ const cheque: Movimiento = {
   estado: "pendiente",
   fecha_liquidacion: "2026-10-15",
   liquidable: true,
+  endosable: false,
+  endosado_a: null,
+  endose_origen: null,
 };
 
 const paginated = (items: Movimiento[]) => ({

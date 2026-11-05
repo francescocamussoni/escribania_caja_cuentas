@@ -5,6 +5,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import Date, case, cast, func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 from zoneinfo import ZoneInfo
 
@@ -16,6 +17,8 @@ from app.models.movimiento import Movimiento, effective_date_expr
 from app.models.usuario import Usuario
 from app.schemas.movimiento import (
     CreateMovimientoRequest,
+    EndosarChequeRequest,
+    EndoseResponse,
     MovimientoCreateResponse,
     MovimientoResponse,
     PaginatedMovimientosResponse,
@@ -26,8 +29,11 @@ from app.schemas.movimiento import (
 from app.services.saldo_service import get_valores_totales
 from app.services.cheque_service import fecha_carga_expr, list_cheques_pendientes_page
 from app.services.movimiento_service import (
+    CajaDestinoNotFoundError,
     ChequeAunNoLiquidableError,
     ChequeYaLiquidadoError,
+    EndoseDestinoInvalidoError,
+    MovimientoEndosadoError,
     MovimientoNotFoundError,
     MovimientoService,
 )
@@ -336,6 +342,90 @@ def liquidar_cheque(
     return movimiento_to_response(movimiento, current_user)
 
 
+@router.post(
+    "/{caja_id}/movimientos/{movimiento_id}/endosar",
+    response_model=EndoseResponse,
+)
+def endosar_cheque(
+    caja_id: int,
+    movimiento_id: int,
+    payload: EndosarChequeRequest,
+    current_user: Annotated[Usuario, Depends(require_role("secretaria"))],
+    db: Annotated[Session, Depends(get_db)],
+) -> EndoseResponse:
+    """Endorse a pending cheque to another caja (feature 011), atomically.
+
+    The cheque is liquidated in its own caja and an inverse movement is created in the
+    destination caja. Allowed at any time (it does not depend on the fecha de liquidación).
+    """
+    caja = db.get(Caja, caja_id)
+    if caja is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Caja no encontrada")
+
+    service = MovimientoService(db)
+    try:
+        result = service.endosar_cheque(
+            caja_id=caja_id,
+            movimiento_id=movimiento_id,
+            caja_destino_id=payload.caja_destino_id,
+            user=current_user,
+        )
+        db.flush()
+    except MovimientoNotFoundError:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Cheque no encontrado",
+        ) from None
+    except CajaDestinoNotFoundError:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Caja destino no encontrada",
+        ) from None
+    except EndoseDestinoInvalidoError as exc:
+        db.rollback()
+        raise HTTPException(
+            status_code=422,
+            detail=str(exc),
+        ) from None
+    except (ChequeYaLiquidadoError, IntegrityError):
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="El cheque ya fue liquidado o endosado",
+        ) from None
+    except Exception:
+        db.rollback()
+        logger.exception("cheque endorsement failed")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="No se pudo endosar el cheque.",
+        ) from None
+
+    db.commit()
+    cheque = result.cheque
+    destino = result.movimiento_destino
+    db.refresh(cheque)
+    db.refresh(destino)
+    log_security_event(
+        logger,
+        "cheque_endorsed",
+        username=current_user.username,
+        rol=current_user.rol,
+        caja_id=caja_id,
+        caja_destino_id=destino.caja_id,
+        movimiento_id=cheque.id,
+        movimiento_destino_id=destino.id,
+        instrumento=cheque.instrumento,
+        moneda=cheque.moneda,
+    )
+    return EndoseResponse(
+        cheque=movimiento_to_response(cheque, current_user),
+        movimiento_destino=movimiento_to_response(destino, current_user),
+    )
+
+
 @router.patch(
     "/{caja_id}/movimientos/{movimiento_id}",
     response_model=MovimientoResponse,
@@ -373,6 +463,12 @@ def update_movimiento(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Movimiento no encontrado",
+        ) from None
+    except MovimientoEndosadoError:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Un endose no se puede modificar",
         ) from None
     except ValueError as exc:
         db.rollback()
@@ -423,6 +519,12 @@ def delete_movimiento(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Movimiento no encontrado",
+        ) from None
+    except MovimientoEndosadoError:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Un endose no se puede eliminar",
         ) from None
 
     db.commit()

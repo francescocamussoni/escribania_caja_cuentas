@@ -54,6 +54,7 @@ class Caja(Base):
 
     movimientos: Mapped[list["Movimiento"]] = relationship(
         back_populates="caja",
+        foreign_keys="Movimiento.caja_id",
     )
     plazos_fijos: Mapped[list["PlazoFijo"]] = relationship(
         back_populates="caja",

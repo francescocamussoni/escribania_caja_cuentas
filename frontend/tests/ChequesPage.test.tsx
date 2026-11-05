@@ -14,11 +14,15 @@ import type { Movimiento, PaginatedMovimientos } from "../src/services/api";
 
 const fetchCheques = vi.fn();
 const liquidarCheque = vi.fn();
+const endosarCheque = vi.fn();
+const fetchCajas = vi.fn();
 const authState = { rol: "secretaria" as "secretaria" | "escribano" };
 
 vi.mock("../src/services/api", () => ({
   fetchCheques: (...args: unknown[]) => fetchCheques(...args),
   liquidarCheque: (...args: unknown[]) => liquidarCheque(...args),
+  endosarCheque: (...args: unknown[]) => endosarCheque(...args),
+  fetchCajas: (...args: unknown[]) => fetchCajas(...args),
 }));
 
 vi.mock("../src/hooks/useAuth", () => ({
@@ -49,6 +53,9 @@ function cheque(overrides: Partial<Movimiento> = {}): Movimiento {
     fecha_liquidacion: "2026-10-15",
     fecha_liquidado: null,
     liquidable: true,
+    endosable: false,
+    endosado_a: null,
+    endose_origen: null,
     ...overrides,
   };
 }
@@ -87,6 +94,12 @@ describe("ChequesPage (T044)", () => {
   beforeEach(() => {
     fetchCheques.mockReset();
     liquidarCheque.mockReset();
+    endosarCheque.mockReset();
+    fetchCajas.mockReset();
+    fetchCajas.mockResolvedValue([
+      { id: 7, nombre: "Bambina", slug: "bambina" },
+      { id: 9, nombre: "Ebel", slug: "ebel" },
+    ]);
     authState.rol = "secretaria";
   });
 
@@ -315,5 +328,75 @@ describe("ChequesPage (T044)", () => {
     expect(
       within(section(/próximos a liquidar este mes/i)).getByRole("button", { name: /^liquidar$/i }),
     ).toBeDisabled();
+  });
+
+  it("T024: Endose en ambos listados; Liquidar deshabilitado con fecha futura y Endose habilitado", async () => {
+    setup(
+      page([cheque({ id: 1, descripcion: "Apto uno", endosable: true })]),
+      page([
+        cheque({
+          id: 2,
+          descripcion: "Proximo uno",
+          fecha_liquidacion: "2999-01-01",
+          endosable: true,
+        }),
+      ]),
+    );
+    renderPage();
+    await screen.findByText("Apto uno");
+    await screen.findByText("Proximo uno");
+
+    const aptos = section(/aptos para liquidar/i);
+    const proximos = section(/próximos a liquidar este mes/i);
+    expect(within(aptos).getByRole("button", { name: /^endose$/i })).toBeEnabled();
+    expect(within(proximos).getByRole("button", { name: /^endose$/i })).toBeEnabled();
+    expect(within(proximos).getByRole("button", { name: /^liquidar$/i })).toBeDisabled();
+  });
+
+  it("T024: endosar usa la caja del cheque como origen y recarga ambos listados", async () => {
+    setup(
+      page([cheque({ id: 31, endosable: true, caja: { id: 9, nombre: "Ebel", slug: "ebel" } })]),
+      page([]),
+    );
+    endosarCheque.mockResolvedValue({ cheque: cheque(), movimiento_destino: cheque({ id: 99 }) });
+    renderPage();
+    await screen.findByText("Cheque de prueba");
+    const callsBefore = fetchCheques.mock.calls.length;
+
+    fireEvent.click(screen.getByRole("button", { name: /^endose$/i }));
+    // La caja origen (9) no se ofrece como destino.
+    expect(await screen.findByRole("radio", { name: "Bambina" })).toBeInTheDocument();
+    expect(screen.queryByRole("radio", { name: "Ebel" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("radio", { name: "Bambina" }));
+    fireEvent.click(screen.getByRole("button", { name: "Confirmar" }));
+
+    await waitFor(() => expect(endosarCheque).toHaveBeenCalledWith(9, 31, 7));
+    await waitFor(() => expect(fetchCheques.mock.calls.length).toBeGreaterThan(callsBefore));
+    const after = fetchCheques.mock.calls.slice(callsBefore).map((c) => c[0]);
+    expect(after).toEqual(expect.arrayContaining(["aptos", "proximos"]));
+  });
+
+  it("T024: si endosar falla muestra un error genérico y el cheque permanece", async () => {
+    setup(page([cheque({ id: 31, endosable: true })]), page([]));
+    endosarCheque.mockRejectedValue(new Error('{"detail":"interno"}'));
+    renderPage();
+    await screen.findByText("Cheque de prueba");
+
+    fireEvent.click(screen.getByRole("button", { name: /^endose$/i }));
+    fireEvent.click(await screen.findByRole("radio", { name: "Ebel" }));
+    fireEvent.click(screen.getByRole("button", { name: "Confirmar" }));
+
+    expect(await screen.findByText("No se pudo endosar el cheque.")).toBeInTheDocument();
+    expect(screen.queryByText(/interno/)).not.toBeInTheDocument();
+    expect(screen.getByText("Cheque de prueba")).toBeInTheDocument();
+  });
+
+  it("T024: el Escribano no ve Endose ni Liquidar", async () => {
+    authState.rol = "escribano";
+    setup(page([cheque({ id: 1, endosable: true })]), page([]));
+    renderPage();
+    await screen.findByText("Cheque de prueba");
+    expect(screen.queryByRole("button", { name: /^endose$/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^liquidar$/i })).not.toBeInTheDocument();
   });
 });
